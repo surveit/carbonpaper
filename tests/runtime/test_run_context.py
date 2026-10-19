@@ -99,7 +99,7 @@ def test_run_context_is_frozen(tmp_path: Path) -> None:
 
 
 def test_for_workflow_run_grants_read_write_scope(tmp_path: Path) -> None:
-    ctx = RunContext.for_workflow_run(tmp_path / "run", "proj", "r1")
+    ctx = RunContext.for_workflow_run(tmp_path / "run", "proj", "r1", bound_sources={})
     assert hasattr(ctx.stage_cache, "record")  # the only constructor that can write
     assert ctx.identity == RunIdentity(project="proj", run_id="r1")
     assert ctx.stage_cache is not None
@@ -108,7 +108,7 @@ def test_for_workflow_run_grants_read_write_scope(tmp_path: Path) -> None:
 
 def test_for_workflow_run_carries_bust_cache(tmp_path: Path) -> None:
     ctx = RunContext.for_workflow_run(
-        tmp_path / "run", "proj", "r1", RunParameters(bust_cache=True))
+        tmp_path / "run", "proj", "r1", RunParameters(bust_cache=True), bound_sources={})
     assert ctx.params.bust_cache is True
     assert ctx.stage_cache is not None  # still write-capable: re-pinned, not stale
 
@@ -117,14 +117,14 @@ def test_only_a_run_with_a_writable_cache_may_bust_it(tmp_path: Path) -> None:
     for constructor in (RunContext.for_workflow_test_run,):
         with pytest.raises(ValidationError, match="not writable"):
             constructor(tmp_path / "run", "proj", "r1",
-                        RunParameters(bust_cache=True))
+                        RunParameters(bust_cache=True), bound_sources={})
     with pytest.raises(ValidationError, match="not writable"):
         RunContext.for_stages_outside_a_run(
             tmp_path / "run", RunParameters(bust_cache=True))
 
 
 def test_for_workflow_test_run_grants_scope_but_read_only(tmp_path: Path) -> None:
-    ctx = RunContext.for_workflow_test_run(tmp_path / "run", "proj", "r1")
+    ctx = RunContext.for_workflow_test_run(tmp_path / "run", "proj", "r1", bound_sources={})
     assert ctx.identity == RunIdentity(project="proj", run_id="r1")
     assert ctx.stage_cache is not None
     assert not hasattr(ctx.stage_cache, "record")

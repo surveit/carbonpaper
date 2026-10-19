@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from app.core.ids import ID
 from app.models.claims import ClaimStatus
 from app.models.records.claims import Claim, ClaimShape
-from app.models.citations import StageOutputCellCitation
+from app.models.citations import PublishedCitation, StageOutputSpanCitation, StageOutputCellCitation
 from app.services.claim_shapes import load_claim_shape
 from app.services.errors import ClaimRefused
 from app.web.run_index import build_run_index_rows
@@ -91,7 +91,9 @@ def _find_publish_href(project_id: ID) -> str:
     return f"/project/{project_id}/runs/{rows[0].run_id}/publish"
 
 
-def _read_cited_value(citation) -> str:
+def _read_cited_value(citation: PublishedCitation) -> str:
+    if isinstance(citation, StageOutputSpanCitation):
+        return citation.quote
     return str(citation.value) if isinstance(citation, StageOutputCellCitation) else ""
 
 

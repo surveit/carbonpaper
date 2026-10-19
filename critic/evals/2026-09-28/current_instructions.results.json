@@ -1,0 +1,2309 @@
+{
+  "settings": {
+    "repo": "surveit/carbonpaper",
+    "rubric_dir": "critic/rubrics/current_instructions",
+    "pr_numbers": [
+      937,
+      938,
+      939,
+      940,
+      941,
+      942,
+      943,
+      944,
+      945,
+      946,
+      947,
+      948,
+      949,
+      950,
+      951,
+      952,
+      953,
+      954,
+      955,
+      956,
+      957,
+      958,
+      959,
+      960,
+      961,
+      962,
+      963,
+      964,
+      965,
+      966,
+      967,
+      968,
+      969,
+      970,
+      971,
+      972,
+      973,
+      974,
+      975,
+      976,
+      977,
+      978,
+      979,
+      980,
+      981,
+      982,
+      983,
+      984,
+      985,
+      986,
+      987,
+      988,
+      989,
+      990,
+      991,
+      992,
+      993,
+      994,
+      995,
+      996,
+      997,
+      1001,
+      1002,
+      1003,
+      1004,
+      1005,
+      1006,
+      1007,
+      1008,
+      1009,
+      1010,
+      1011,
+      1013,
+      1014,
+      1015,
+      1016,
+      1018,
+      1020,
+      1021,
+      1023,
+      1024,
+      1025,
+      1026,
+      1027,
+      1028,
+      1029,
+      1030,
+      1031,
+      1032,
+      1033,
+      1034,
+      1035,
+      1036,
+      1038,
+      1039,
+      1040,
+      1041,
+      1042,
+      1043,
+      1044,
+      1045,
+      1047,
+      1048,
+      1049,
+      1050,
+      1051,
+      1052,
+      1053,
+      1054,
+      1056,
+      1061,
+      1064,
+      1065,
+      1066,
+      1068,
+      1070,
+      1072,
+      1074,
+      1076,
+      1078,
+      1079,
+      1080,
+      1081,
+      1082,
+      1083,
+      1084,
+      1085,
+      1086,
+      1087,
+      1088,
+      1089,
+      1090,
+      1091,
+      1092,
+      1093,
+      1094,
+      1095,
+      1096
+    ],
+    "limit": 8,
+    "corpus_dir": "/private/tmp/push-sp/rsi/github/carbonpaper",
+    "labels_path": "/private/tmp/push-sp/rsi/github/merged/corpus.human.jsonl",
+    "themes_path": "/private/tmp/push-sp/rsi/github/merged/taxonomy.json",
+    "diff_dir": ".critic/diffs",
+    "review_model": null,
+    "judge_model": null,
+    "jobs": 2
+  },
+  "rubric_files": [
+    {
+      "name": "owner-global-CLAUDE.md",
+      "origin": "/Users/shuhan/.claude/CLAUDE.md",
+      "sha256": "c73bd2a1536743220e919a533ed399fa412bcfbdb7b71d78964068d695cf682b"
+    },
+    {
+      "name": "repo-AGENTS.md",
+      "origin": "AGENTS.md",
+      "sha256": "69c55d40e9a860a32d19bb283ac0a4e143b976dc311a1540dcdd0203d9aed6bd"
+    },
+    {
+      "name": "repo-app-AGENTS.md",
+      "origin": "app/AGENTS.md",
+      "sha256": "e39926a0620a40abaa8011acec97a8e04ecbdb0b6d01bde45d24e093e3e573bf"
+    },
+    {
+      "name": "repo-app-runtime-AGENTS.md",
+      "origin": "app/runtime/AGENTS.md",
+      "sha256": "e52c860139ada637fb4ff8dcb733d6ddd821f4b5042b1f101d7d3b98b8fbaf02"
+    },
+    {
+      "name": "repo-app-templates-AGENTS.md",
+      "origin": "app/templates/AGENTS.md",
+      "sha256": "af9b38e2d9ad3c3045147907beb6a544672d4409eb06d24b09c4cc12dc034238"
+    }
+  ],
+  "started_at": "2026-09-28T19:26:54+00:00",
+  "finished_at": "2026-09-28T19:33:32+00:00",
+  "scored": [
+    {
+      "pr": 944,
+      "commit_sha": "4b53309c3d6ab2130071892b761e6ade4444f715",
+      "reals": [
+        {
+          "html_url": "https://github.com/surveit/carbonpaper/pull/944#discussion_r3913329554",
+          "pr": 944,
+          "thread_id": 3913329554,
+          "path": "app/tools/prompt_fragments.py",
+          "line": 92,
+          "start_line": null,
+          "commit_sha": "4b53309c3d6ab2130071892b761e6ade4444f715",
+          "created_at": "2026-09-02T10:52:38Z",
+          "diff_hunk": "@@ -87,6 +87,9 @@ def render_link_map(base_url: str) -> str:\n         \"# Links\",\n         f\"Your reader is in a browser at {base} — write the WHOLE address, since a bare \"\n         \"path is text on their screen rather than something they can click.\",\n+        \"They move between the pages below while this conversation stays open, so which \"\n+        \"one they have in front of them is not something the conversation records. \"\n+        \"`get_current_url` reads it; call it before answering \\\"this\\\" or \\\"here\\\".\",",
+          "body": "call it before answering questions that imply a shared view of the browser",
+          "themes": [
+            "product_copy",
+            "llm_contract"
+          ],
+          "speech_act": "instruction",
+          "severity": "should",
+          "rule": "Prompt triggers name the semantic condition, not keywords."
+        }
+      ],
+      "review": {
+        "pr": 944,
+        "commit_sha": "4b53309c3d6ab2130071892b761e6ade4444f715",
+        "rubric": "current_instructions",
+        "model_ids": [
+          "claude-opus-4-8[1m]"
+        ],
+        "cost_usd": 0.551855,
+        "duration_ms": 79797,
+        "theme_vocabulary": [
+          "naming",
+          "vocabulary",
+          "code_placement",
+          "reinvents_existing",
+          "one_source_of_truth",
+          "needless_abstraction",
+          "dead_code",
+          "scope_creep",
+          "backcompat",
+          "dict_any",
+          "weak_types",
+          "fallback_or_fabrication",
+          "boundary_validation",
+          "data_model",
+          "verbose_prose",
+          "prompt_design",
+          "llm_contract",
+          "prose_accuracy",
+          "comments_and_docs",
+          "product_copy",
+          "ux_behavior",
+          "design_direction",
+          "correctness_bug",
+          "tests",
+          "gates",
+          "ignored_feedback",
+          "readability",
+          "hardcoded_values",
+          "interface_shape",
+          "review_guide",
+          "question_only",
+          "other"
+        ],
+        "predictions": [
+          {
+            "path": "app/static/chat-panel.js",
+            "line": 10,
+            "theme": "comments_and_docs",
+            "rule": "A comment carries one short sentence, not a paragraph",
+            "text": "This is four lines explaining a two-line function, and half of it points at _chat_rail_head.html and re-argues the design. Cut it down to what a reader of this file needs — the null-on-chat-surface fact.",
+            "severity": "nit"
+          },
+          {
+            "path": "app/agents/compiler/config.py",
+            "line": 33,
+            "theme": "comments_and_docs",
+            "rule": "Don't comment the edit or justify placement in prose",
+            "text": "This just narrates why the binding lives in the prompt — the same point the session note prose and the PR text already make. Drop it.",
+            "severity": "nit"
+          }
+        ]
+      },
+      "matching": {
+        "pairs": [],
+        "unmatched_predictions": [
+          0,
+          1
+        ],
+        "unmatched_reals": [
+          0
+        ]
+      },
+      "judge_verdicts": [],
+      "judge_cost_usd": 0.0,
+      "judge_model_ids": [],
+      "score": {
+        "predicted": 2,
+        "real": 1,
+        "matched_predictions": 0,
+        "matched_reals": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0
+      }
+    },
+    {
+      "pr": 950,
+      "commit_sha": "323848ac447ecf5a549dc664409b18ae7dd069c1",
+      "reals": [
+        {
+          "html_url": "https://github.com/surveit/carbonpaper/pull/950#discussion_r3909080021",
+          "pr": 950,
+          "thread_id": 3908756109,
+          "path": "app/tools/tool_specs.py",
+          "line": 360,
+          "start_line": null,
+          "commit_sha": "323848ac447ecf5a549dc664409b18ae7dd069c1",
+          "created_at": "2026-09-01T22:46:07Z",
+          "diff_hunk": "@@ -356,7 +356,9 @@ def find_tool_names() -> set[str]:\n         description=\"\"\"\\\n The current manifest of one production run as a dict: its overall status\n (running / ok / errors / halted), per-stage statuses, and run metadata. Poll\n-this after run_workflow to follow progress and see the outcome. An unknown or\n+this after run_workflow to follow progress and see the outcome. An errored stage\n+carries `type` and `message`; the traceback behind them is on the run page, which",
+          "body": "cut the change. the traceback shouldn't go to the run page either if the point is to hide it from the user. otherwise the agent/user can anyways see the same thing",
+          "themes": [
+            "design_direction"
+          ],
+          "speech_act": "correction",
+          "severity": "blocking",
+          "rule": "Hiding data from the agent means hiding it on every surface."
+        }
+      ],
+      "review": {
+        "pr": 950,
+        "commit_sha": "323848ac447ecf5a549dc664409b18ae7dd069c1",
+        "rubric": "current_instructions",
+        "model_ids": [
+          "claude-opus-4-8[1m]"
+        ],
+        "cost_usd": 0.5061694999999999,
+        "duration_ms": 66044,
+        "theme_vocabulary": [
+          "naming",
+          "vocabulary",
+          "code_placement",
+          "reinvents_existing",
+          "one_source_of_truth",
+          "needless_abstraction",
+          "dead_code",
+          "scope_creep",
+          "backcompat",
+          "dict_any",
+          "weak_types",
+          "fallback_or_fabrication",
+          "boundary_validation",
+          "data_model",
+          "verbose_prose",
+          "prompt_design",
+          "llm_contract",
+          "prose_accuracy",
+          "comments_and_docs",
+          "product_copy",
+          "ux_behavior",
+          "design_direction",
+          "correctness_bug",
+          "tests",
+          "gates",
+          "ignored_feedback",
+          "readability",
+          "hardcoded_values",
+          "interface_shape",
+          "review_guide",
+          "question_only",
+          "other"
+        ],
+        "predictions": [
+          {
+            "path": "app/models/records/run_manifest.py",
+            "line": 125,
+            "theme": "one_source_of_truth",
+            "rule": "Derive the stripped shape from to_dict, don't restate its dump config",
+            "text": "This re-spells exclude_unset + _STORE_BOOKKEEPING that to_dict already owns, so the two now have to stay in step. Build this off to_dict (drop the traceback) rather than a second model_dump with its own nested-exclude expression a reader has to decode.",
+            "severity": "should"
+          },
+          {
+            "path": "app/services/run.py",
+            "line": 157,
+            "theme": "comments_and_docs",
+            "rule": "Docstring restates the name and points elsewhere",
+            "text": "This mostly restates the function name and then sends the reader off to the run page. The why already lives on to_dict_without_tracebacks; drop this one.",
+            "severity": "nit"
+          },
+          {
+            "path": "tests/test_agent_never_reads_a_traceback.py",
+            "line": 77,
+            "theme": "comments_and_docs",
+            "rule": "Don't narrate what the asserts already say",
+            "text": "The two asserts below already say this; the comment adds nothing.",
+            "severity": "nit"
+          }
+        ]
+      },
+      "matching": {
+        "pairs": [],
+        "unmatched_predictions": [
+          0,
+          1,
+          2
+        ],
+        "unmatched_reals": [
+          0
+        ]
+      },
+      "judge_verdicts": [],
+      "judge_cost_usd": 0.0,
+      "judge_model_ids": [],
+      "score": {
+        "predicted": 3,
+        "real": 1,
+        "matched_predictions": 0,
+        "matched_reals": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0
+      }
+    },
+    {
+      "pr": 951,
+      "commit_sha": "80974fc65a975783f81377516535f37339db1633",
+      "reals": [
+        {
+          "html_url": "https://github.com/surveit/carbonpaper/pull/951#discussion_r3914405685",
+          "pr": 951,
+          "thread_id": 3914405685,
+          "path": "app/tools/editing.py",
+          "line": 131,
+          "start_line": null,
+          "commit_sha": "80974fc65a975783f81377516535f37339db1633",
+          "created_at": "2026-09-02T13:07:59Z",
+          "diff_hunk": "@@ -127,8 +127,9 @@ def read_stage_output_rows(\n     },\n     \"save_version\": {\n         \"project_id\": PROJECT_ID,\n-        \"message\": \"What this version changes and why — shown to the human reviewer \"\n-            \"deciding whether to publish it.\",\n+        \"message\": \"What this version changes, in 150 characters or fewer — it NAMES the \"\n+            \"version in a list a reader scans, so a longer one is refused rather than \"",
+          "body": "What identifies this version to a reader in 150 characters or fewer",
+          "themes": [
+            "verbose_prose",
+            "product_copy"
+          ],
+          "speech_act": "instruction",
+          "severity": "should",
+          "rule": "Tool field descriptions: one short sentence, no rationale."
+        }
+      ],
+      "review": {
+        "pr": 951,
+        "commit_sha": "80974fc65a975783f81377516535f37339db1633",
+        "rubric": "current_instructions",
+        "model_ids": [
+          "claude-opus-4-8[1m]"
+        ],
+        "cost_usd": 0.2495315,
+        "duration_ms": 67109,
+        "theme_vocabulary": [
+          "naming",
+          "vocabulary",
+          "code_placement",
+          "reinvents_existing",
+          "one_source_of_truth",
+          "needless_abstraction",
+          "dead_code",
+          "scope_creep",
+          "backcompat",
+          "dict_any",
+          "weak_types",
+          "fallback_or_fabrication",
+          "boundary_validation",
+          "data_model",
+          "verbose_prose",
+          "prompt_design",
+          "llm_contract",
+          "prose_accuracy",
+          "comments_and_docs",
+          "product_copy",
+          "ux_behavior",
+          "design_direction",
+          "correctness_bug",
+          "tests",
+          "gates",
+          "ignored_feedback",
+          "readability",
+          "hardcoded_values",
+          "interface_shape",
+          "review_guide",
+          "question_only",
+          "other"
+        ],
+        "predictions": [
+          {
+            "path": "app/web/diagrams.py",
+            "line": 64,
+            "theme": "design_direction",
+            "rule": "User-facing type labels name what the reader can act on",
+            "text": "\"run code dangerously\" as the label reads oddly — the adverb is doing the work a glyph should. Is this the phrasing we want for the type name itself?",
+            "severity": "should"
+          },
+          {
+            "path": "app/web/diagrams.py",
+            "line": 65,
+            "theme": "correctness_bug",
+            "rule": "Equivalent danger must be marked consistently",
+            "text": "python_frame_function is just as unsandboxed as python_row_function but stays \"table function\" — if the distinction being surfaced is danger, this one is mislabelled.",
+            "severity": "should"
+          },
+          {
+            "path": "app/tools/tool_specs.py",
+            "line": 599,
+            "theme": "one_source_of_truth",
+            "rule": "One limit lives in one place, not restated in prose",
+            "text": "150 is now hardcoded here and in editing.py while MAX_MESSAGE_CHARS holds it in code — these will drift. Derive the number from the constant.",
+            "severity": "should"
+          },
+          {
+            "path": "app/models/records/workflow_version.py",
+            "line": 27,
+            "theme": "comments_and_docs",
+            "rule": "A field description states the contract, not the edit rationale",
+            "text": "The second sentence narrates why the ceiling isn't a field constraint — that's edit rationale, not something a reader of this field needs. Drop it.",
+            "severity": "nit"
+          },
+          {
+            "path": "app/templates/version_detail.html",
+            "line": 63,
+            "theme": "code_placement",
+            "rule": "Client hooks are js- classes in static JS, not inline id scripts",
+            "text": "Inline script binding by id — the convention here is a js- class and the behaviour in a static file. Move it.",
+            "severity": "nit"
+          }
+        ]
+      },
+      "matching": {
+        "pairs": [],
+        "unmatched_predictions": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "unmatched_reals": [
+          0
+        ]
+      },
+      "judge_verdicts": [],
+      "judge_cost_usd": 0.0,
+      "judge_model_ids": [],
+      "score": {
+        "predicted": 5,
+        "real": 1,
+        "matched_predictions": 0,
+        "matched_reals": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0
+      }
+    },
+    {
+      "pr": 967,
+      "commit_sha": "f5c698645aaa9d22f643796a5d583747e0c31ec2",
+      "reals": [
+        {
+          "html_url": "https://github.com/surveit/carbonpaper/pull/967#discussion_r3923494126",
+          "pr": 967,
+          "thread_id": 3923228848,
+          "path": "app/web/routers/run_stage.py",
+          "line": 117,
+          "start_line": null,
+          "commit_sha": "f5c698645aaa9d22f643796a5d583747e0c31ec2",
+          "created_at": "2026-09-03T10:19:33Z",
+          "diff_hunk": "@@ -112,6 +113,9 @@ async def run_stage_partial(\n             # code that produced this run's rows. Empty where no eval targets the stage.\n             \"eval_coverages\": find_eval_coverages(\n                 project_id, stage_id, manifest.get(\"workflow_version\")),\n+            # A halted queue's rows outlive the halt, so a finished stage reads back.\n+            \"has_review_queue\": find_queue_snapshot_path(",
+          "body": "it's strange we need this actually. I feel like basically the main question is whether the stage is finished or not changes the nature of the button but in any case it just links into the same HRQ view?",
+          "themes": [
+            "needless_abstraction"
+          ],
+          "speech_act": "correction",
+          "severity": "should",
+          "rule": "One destination needs one link value, not a flag plus link."
+        },
+        {
+          "html_url": "https://github.com/surveit/carbonpaper/pull/967#discussion_r3923716203",
+          "pr": 967,
+          "thread_id": 3923716203,
+          "path": "app/web/queue_view.py",
+          "line": 187,
+          "start_line": null,
+          "commit_sha": "ea3a0d7396871e5f5e46f9eb0332dc642de979d2",
+          "created_at": "2026-09-03T10:48:18Z",
+          "diff_hunk": "@@ -163,6 +168,40 @@ def find_definition_drift(stage_def: WorkflowStage, halted_fingerprint: str) ->\n     )\n \n \n+# What a closed queue says, per status its own stage reached.\n+_USED_THE_DECISIONS = (\n+    \"because this run has moved on and used these decisions, they can no longer be modified\"\n+)\n+_CLOSED_BY_STAGE_STATUS: dict[StageStatus, str] = {\n+    StageStatus.OK: _USED_THE_DECISIONS,\n+    StageStatus.VALIDATION_WARNINGS: _USED_THE_DECISIONS,\n+    StageStatus.ERROR:\n+        \"because the stage stopped with an error, its decisions can no longer be modified\",\n+    StageStatus.CANCELLED:\n+        \"because the run was cancelled, its decisions can no longer be modified\",\n+    StageStatus.RUNNING: \"the stage is running, so nothing here can be modified\",\n+    StageStatus.PENDING:\n+        \"the stage has not run yet in this run, so there is nothing here to modify\",\n+}\n+\n+_NO_STAGE_RECORD = (",
+          "body": "hmm is this a caching problem? so e.g. if a run just cached through does the review queue show nothing?",
+          "themes": [
+            "correctness_bug"
+          ],
+          "speech_act": "question",
+          "severity": "blocking",
+          "rule": "Check the fully-cached run path still shows the feature."
+        },
+        {
+          "html_url": "https://github.com/surveit/carbonpaper/pull/967#discussion_r3923728523",
+          "pr": 967,
+          "thread_id": 3923228561,
+          "path": "app/web/queue_view.py",
+          "line": 172,
+          "start_line": null,
+          "commit_sha": "f5c698645aaa9d22f643796a5d583747e0c31ec2",
+          "created_at": "2026-09-03T10:49:56Z",
+          "diff_hunk": "@@ -163,6 +168,34 @@ def find_definition_drift(stage_def: WorkflowStage, halted_fingerprint: str) ->\n     )\n \n \n+# Why a queue takes no more decisions, per status its own stage reached.\n+_CLOSED_BY_STAGE_STATUS: dict[StageStatus, str] = {",
+          "body": "wait explain. the queue data is not tied a run? What IS the queue's data? Isn't it the input stage joined to existing decisions (all stored as cache? Are they stored anywhere else?). And then the status itself is stored on run manifest. Is anything else stored?",
+          "themes": [
+            "data_model",
+            "question_only"
+          ],
+          "speech_act": "question",
+          "severity": "should",
+          "rule": "Explain what state is stored where, and its scope."
+        }
+      ],
+      "review": {
+        "pr": 967,
+        "commit_sha": "f5c698645aaa9d22f643796a5d583747e0c31ec2",
+        "rubric": "current_instructions",
+        "model_ids": [
+          "claude-opus-4-8[1m]"
+        ],
+        "cost_usd": 0.2935065,
+        "duration_ms": 79385,
+        "theme_vocabulary": [
+          "naming",
+          "vocabulary",
+          "code_placement",
+          "reinvents_existing",
+          "one_source_of_truth",
+          "needless_abstraction",
+          "dead_code",
+          "scope_creep",
+          "backcompat",
+          "dict_any",
+          "weak_types",
+          "fallback_or_fabrication",
+          "boundary_validation",
+          "data_model",
+          "verbose_prose",
+          "prompt_design",
+          "llm_contract",
+          "prose_accuracy",
+          "comments_and_docs",
+          "product_copy",
+          "ux_behavior",
+          "design_direction",
+          "correctness_bug",
+          "tests",
+          "gates",
+          "ignored_feedback",
+          "readability",
+          "hardcoded_values",
+          "interface_shape",
+          "review_guide",
+          "question_only",
+          "other"
+        ],
+        "predictions": [
+          {
+            "path": "app/web/queue_view.py",
+            "line": 191,
+            "theme": "weak_types",
+            "rule": "Match a closed enum exhaustively; no catch-all fallback",
+            "text": "Handle every StageStatus explicitly instead of `.get` with a fallback — this dumps the raw enum value into user-facing prose for any status you didn't map, and nothing catches the miss.",
+            "severity": "should"
+          },
+          {
+            "path": "app/static/review-queue.css",
+            "line": 155,
+            "theme": "comments_and_docs",
+            "rule": "Don't comment styling a class name already explains",
+            "text": "This two-line comment over a font-weight rule earns nothing the class name doesn't already say — drop it.",
+            "severity": "nit"
+          },
+          {
+            "path": "app/web/loading.py",
+            "line": 411,
+            "theme": "readability",
+            "rule": "Prefer the plain loop over a dense walrus generator",
+            "text": "The original for-loop read cleanly; this walrus-in-a-generator is denser for no gain. Keep the loop.",
+            "severity": "nit"
+          }
+        ]
+      },
+      "matching": {
+        "pairs": [],
+        "unmatched_predictions": [
+          0,
+          1,
+          2
+        ],
+        "unmatched_reals": [
+          0,
+          1,
+          2
+        ]
+      },
+      "judge_verdicts": [
+        {
+          "pair_id": 1,
+          "same_point": false,
+          "reason": "Reviewer asks whether caching causes an empty queue; critic asks to enumerate all StageStatus values instead of a .get fallback — different concerns."
+        },
+        {
+          "pair_id": 2,
+          "same_point": false,
+          "reason": "Reviewer questions what data the queue is tied to and where it's stored; critic asks for explicit handling of every status — unrelated points."
+        }
+      ],
+      "judge_cost_usd": 0.016574,
+      "judge_model_ids": [
+        "claude-opus-4-8[1m]"
+      ],
+      "score": {
+        "predicted": 3,
+        "real": 3,
+        "matched_predictions": 0,
+        "matched_reals": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0
+      }
+    },
+    {
+      "pr": 970,
+      "commit_sha": "92192812e2b4cb580bb5292a8b7aeea25d2ae480",
+      "reals": [
+        {
+          "html_url": "https://github.com/surveit/carbonpaper/pull/970#discussion_r3924330983",
+          "pr": 970,
+          "thread_id": 3924330983,
+          "path": "app/services/project.py",
+          "line": 443,
+          "start_line": null,
+          "commit_sha": "92192812e2b4cb580bb5292a8b7aeea25d2ae480",
+          "created_at": "2026-09-03T12:07:20Z",
+          "diff_hunk": "@@ -429,18 +429,30 @@ def export_project(project_id: str) -> WorkflowFile:\n     if document is None:\n         raise ValueError(f\"project '{project_id}' has no document — cannot export\")\n     project_terms = terms.load_terms(project_id)\n-    stages = loader.list_parsed_stages(loader.load_stage_entries(project_id))\n     return WorkflowFile(\n         name=meta.name,\n         document=document,\n         model=meta.model,\n         source=meta.source,\n         data_model=project_terms.nouns,\n         verbs=project_terms.verbs,\n-        stages=stages,\n+        stages=_read_latest_version_stages(project_id),\n     )\n \n \n+def _read_latest_version_stages(project_id: str) -> list[Stage]:",
+          "body": "how is that not already existing in something like versioning.py?",
+          "themes": [
+            "reinvents_existing"
+          ],
+          "speech_act": "question",
+          "severity": "should",
+          "rule": "Reuse existing versioning primitives instead of a new helper."
+        }
+      ],
+      "review": {
+        "pr": 970,
+        "commit_sha": "92192812e2b4cb580bb5292a8b7aeea25d2ae480",
+        "rubric": "current_instructions",
+        "model_ids": [
+          "claude-opus-4-8[1m]"
+        ],
+        "cost_usd": 0.10077149999999999,
+        "duration_ms": 32544,
+        "theme_vocabulary": [
+          "naming",
+          "vocabulary",
+          "code_placement",
+          "reinvents_existing",
+          "one_source_of_truth",
+          "needless_abstraction",
+          "dead_code",
+          "scope_creep",
+          "backcompat",
+          "dict_any",
+          "weak_types",
+          "fallback_or_fabrication",
+          "boundary_validation",
+          "data_model",
+          "verbose_prose",
+          "prompt_design",
+          "llm_contract",
+          "prose_accuracy",
+          "comments_and_docs",
+          "product_copy",
+          "ux_behavior",
+          "design_direction",
+          "correctness_bug",
+          "tests",
+          "gates",
+          "ignored_feedback",
+          "readability",
+          "hardcoded_values",
+          "interface_shape",
+          "review_guide",
+          "question_only",
+          "other"
+        ],
+        "predictions": [
+          {
+            "path": "app/services/project.py",
+            "line": 444,
+            "theme": "comments_and_docs",
+            "rule": "Docstring justifying a design choice belongs in the PR, not the code",
+            "text": "This is PR-description justification, not a fact a reader of this function needs. Drop it — the function name already says what it does.",
+            "severity": "nit"
+          },
+          {
+            "path": "tests/test_project_export_import.py",
+            "line": 97,
+            "theme": "comments_and_docs",
+            "rule": "Don't narrate the edit in a comment",
+            "text": "This comment narrates the change (\"export_project reads the latest version, so...\") — a diff annotation. Delete it.",
+            "severity": "nit"
+          },
+          {
+            "path": "app/services/project.py",
+            "line": 449,
+            "theme": "design_direction",
+            "rule": "Confirm the refuse-vs-empty decision at the boundary",
+            "text": "I'd rather this just return [] than refuse — a stage-less export from an unversioned project isn't worth blocking. But leaving it as raise is defensible; let's settle which.",
+            "severity": "should"
+          }
+        ]
+      },
+      "matching": {
+        "pairs": [],
+        "unmatched_predictions": [
+          0,
+          1,
+          2
+        ],
+        "unmatched_reals": [
+          0
+        ]
+      },
+      "judge_verdicts": [
+        {
+          "pair_id": 1,
+          "same_point": false,
+          "reason": "Reviewer questions why the function isn't in versioning.py; critic asks to drop the docstring — different concerns."
+        },
+        {
+          "pair_id": 2,
+          "same_point": false,
+          "reason": "Reviewer asks about function placement in versioning.py; critic debates raising vs returning empty list — unrelated points."
+        }
+      ],
+      "judge_cost_usd": 0.015078999999999999,
+      "judge_model_ids": [
+        "claude-opus-4-8[1m]"
+      ],
+      "score": {
+        "predicted": 3,
+        "real": 1,
+        "matched_predictions": 0,
+        "matched_reals": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0
+      }
+    },
+    {
+      "pr": 971,
+      "commit_sha": "300e0037cc7733d19e4f24a97555ee5379df305e",
+      "reals": [
+        {
+          "html_url": "https://github.com/surveit/carbonpaper/pull/971#discussion_r3947823310",
+          "pr": 971,
+          "thread_id": 3947823310,
+          "path": "app/services/stage_edit.py",
+          "line": 37,
+          "start_line": null,
+          "commit_sha": "300e0037cc7733d19e4f24a97555ee5379df305e",
+          "created_at": "2026-09-07T08:22:16Z",
+          "diff_hunk": "@@ -31,6 +33,23 @@\n )\n \n \n+@dataclass(frozen=True)\n+class StageSpecStore:",
+          "body": "weird that this needs a noun. It's basically a shell wrapper around an interface yes? It's really not a store because it doesn't persist? Simply an interface passed around within one API call right?",
+          "themes": [
+            "needless_abstraction",
+            "naming"
+          ],
+          "speech_act": "correction",
+          "severity": "should",
+          "rule": "Don't name a transient interface a Store; avoid needless nouns."
+        },
+        {
+          "html_url": "https://github.com/surveit/carbonpaper/pull/971#discussion_r3947826182",
+          "pr": 971,
+          "thread_id": 3947826182,
+          "path": "app/services/stage_edit.py",
+          "line": 45,
+          "start_line": null,
+          "commit_sha": "300e0037cc7733d19e4f24a97555ee5379df305e",
+          "created_at": "2026-09-07T08:22:37Z",
+          "diff_hunk": "@@ -31,6 +33,23 @@\n )\n \n \n+@dataclass(frozen=True)\n+class StageSpecStore:\n+    \"\"\"Where an edit reads its stages and writes them back: a draft, or the working copy.\"\"\"\n+\n+    project_id: str\n+    read: Callable[[], dict[str, JsonDict]]\n+    write: Callable[[list[JsonDict]], None]\n+\n+\n+def open_working_copy(project_id: str) -> StageSpecStore:",
+          "body": "I thought we'd effectively killed working copy in favor of drafts.",
+          "themes": [
+            "ignored_feedback",
+            "backcompat"
+          ],
+          "speech_act": "correction",
+          "severity": "blocking",
+          "rule": "Don't build on a concept already agreed for removal."
+        },
+        {
+          "html_url": "https://github.com/surveit/carbonpaper/pull/971#discussion_r3948380235",
+          "pr": 971,
+          "thread_id": 3948380235,
+          "path": "app/mcp/server.py",
+          "line": 138,
+          "start_line": null,
+          "commit_sha": "300e0037cc7733d19e4f24a97555ee5379df305e",
+          "created_at": "2026-09-07T09:30:00Z",
+          "diff_hunk": "@@ -135,13 +135,13 @@ def read_stage(project_id: str, stage_id: str) -> str:\n @mcp.tool(description=read_tool_description(\"edit_stages\"))\n def edit_stages(project_id: str, edits: list[StageEdit]) -> shared.EditedStages:\n     return working_copy.catch_stage_edit_refusals(\n-        lambda: edit_stages_reporting_drops(project_id, edits)\n+        lambda: edit_stages_reporting_drops(working_copy.open_to_write(project_id), edits)",
+          "body": "how can working_copy still exist here if you killed working_copy?. What the heck is the working copy? I'd have expected basically all edit calls to require a draft_id now",
+          "themes": [
+            "backcompat",
+            "prose_accuracy"
+          ],
+          "speech_act": "question",
+          "severity": "blocking",
+          "rule": "Killing a concept means every caller migrates off it."
+        },
+        {
+          "html_url": "https://github.com/surveit/carbonpaper/pull/971#discussion_r3948382303",
+          "pr": 971,
+          "thread_id": 3948382303,
+          "path": "app/services/drafts.py",
+          "line": 152,
+          "start_line": null,
+          "commit_sha": "300e0037cc7733d19e4f24a97555ee5379df305e",
+          "created_at": "2026-09-07T09:30:17Z",
+          "diff_hunk": "@@ -148,6 +149,22 @@ def save_version(\n     return SaveResult(ok=True, version_id=meta.version_id)\n \n \n+def open_session_stages(name: str, session_id: str) -> stage_edit.StageSpecStore:",
+          "body": "You said you killed StagedSpecStore but it's still here?",
+          "themes": [
+            "prose_accuracy"
+          ],
+          "speech_act": "question",
+          "severity": "blocking",
+          "rule": "Claims that something was removed must match the diff."
+        }
+      ],
+      "review": {
+        "pr": 971,
+        "commit_sha": "300e0037cc7733d19e4f24a97555ee5379df305e",
+        "rubric": "current_instructions",
+        "model_ids": [
+          "claude-opus-4-8[1m]"
+        ],
+        "cost_usd": 0.4521265,
+        "duration_ms": 116573,
+        "theme_vocabulary": [
+          "naming",
+          "vocabulary",
+          "code_placement",
+          "reinvents_existing",
+          "one_source_of_truth",
+          "needless_abstraction",
+          "dead_code",
+          "scope_creep",
+          "backcompat",
+          "dict_any",
+          "weak_types",
+          "fallback_or_fabrication",
+          "boundary_validation",
+          "data_model",
+          "verbose_prose",
+          "prompt_design",
+          "llm_contract",
+          "prose_accuracy",
+          "comments_and_docs",
+          "product_copy",
+          "ux_behavior",
+          "design_direction",
+          "correctness_bug",
+          "tests",
+          "gates",
+          "ignored_feedback",
+          "readability",
+          "hardcoded_values",
+          "interface_shape",
+          "review_guide",
+          "question_only",
+          "other"
+        ],
+        "predictions": [
+          {
+            "path": "app/services/drafts.py",
+            "line": 161,
+            "theme": "naming",
+            "rule": "A local name must be judgeable on its own line",
+            "text": "`d` — call it `draft`. a one-letter local carries nothing on the line it sits on.",
+            "severity": "should"
+          },
+          {
+            "path": "tests/tools/test_a_session_edits_its_own_draft.py",
+            "line": 57,
+            "theme": "tests",
+            "rule": "A test name must match what the body asserts",
+            "text": "the name says it writes the working copy, but the body only asserts the guard raises — nothing is written. drop the 'writes the working copy' half.",
+            "severity": "nit"
+          },
+          {
+            "path": "app/tools/editing.py",
+            "line": 64,
+            "theme": "dict_any",
+            "rule": "A fixed-key return is a model, not dict[str, Any]",
+            "text": "newly written `delete_stage` returns dict[str, Any] with fixed ok/issues keys — model it (edit_stages already returns EditedStages).",
+            "severity": "nit"
+          }
+        ]
+      },
+      "matching": {
+        "pairs": [],
+        "unmatched_predictions": [
+          0,
+          1,
+          2
+        ],
+        "unmatched_reals": [
+          0,
+          1,
+          2,
+          3
+        ]
+      },
+      "judge_verdicts": [
+        {
+          "pair_id": 1,
+          "same_point": false,
+          "reason": "One questions why StageSpecStore still exists; the other asks to rename a one-letter variable—different concerns."
+        }
+      ],
+      "judge_cost_usd": 0.008428999999999999,
+      "judge_model_ids": [
+        "claude-opus-4-8[1m]"
+      ],
+      "score": {
+        "predicted": 3,
+        "real": 4,
+        "matched_predictions": 0,
+        "matched_reals": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0
+      }
+    },
+    {
+      "pr": 973,
+      "commit_sha": "d9a1e8a95037c258498888a2bcffd5df12cd0ce9",
+      "reals": [
+        {
+          "html_url": "https://github.com/surveit/carbonpaper/pull/973#discussion_r3925990246",
+          "pr": 973,
+          "thread_id": 3925990246,
+          "path": "app/models/records/claims.py",
+          "line": 59,
+          "start_line": null,
+          "commit_sha": "d9a1e8a95037c258498888a2bcffd5df12cd0ce9",
+          "created_at": "2026-09-03T15:22:00Z",
+          "diff_hunk": "@@ -48,3 +54,28 @@ def save(self) -> None:\n         if Claim.exists(self.id):\n             raise ClaimIsImmutable(self.id)\n         super().save()\n+\n+\n+class ClaimSubmission(PersistedModel):",
+          "body": "What? This is just a Claim! No way this gets made. ",
+          "themes": [
+            "needless_abstraction"
+          ],
+          "speech_act": "correction",
+          "severity": "blocking",
+          "rule": "Don't add a record duplicating an existing concept."
+        },
+        {
+          "html_url": "https://github.com/surveit/carbonpaper/pull/973#discussion_r3925991598",
+          "pr": 973,
+          "thread_id": 3925991598,
+          "path": "app/models/records/claims.py",
+          "line": 73,
+          "start_line": null,
+          "commit_sha": "d9a1e8a95037c258498888a2bcffd5df12cd0ce9",
+          "created_at": "2026-09-03T15:22:11Z",
+          "diff_hunk": "@@ -48,3 +54,28 @@ def save(self) -> None:\n         if Claim.exists(self.id):\n             raise ClaimIsImmutable(self.id)\n         super().save()\n+\n+\n+class ClaimSubmission(PersistedModel):\n+    \"\"\"A figure put up for review. Approving it is what writes the claim.\"\"\"\n+\n+    collection: ClassVar[str] = \"claim_submission\"\n+    SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ\n+\n+    created_by_project_id: ID = Field(frozen=True)\n+    run_id: ID = Field(frozen=True)\n+    slug: str = Field(frozen=True)\n+    shape_id: ID = Field(frozen=True)\n+    context: list[Dimension] = Field(default=[], frozen=True)\n+    citation: PublishedCitation = Field(frozen=True)\n+\n+\n+class DeclinedFigure(PersistedModel):",
+          "body": "we agreed these go away!",
+          "themes": [
+            "ignored_feedback",
+            "needless_abstraction"
+          ],
+          "speech_act": "correction",
+          "severity": "blocking",
+          "rule": "Honor agreed removals; don't reintroduce dropped records."
+        },
+        {
+          "html_url": "https://github.com/surveit/carbonpaper/pull/973#discussion_r3926110179",
+          "pr": 973,
+          "thread_id": 3926110179,
+          "path": "app/models/records/claims.py",
+          "line": 49,
+          "start_line": null,
+          "commit_sha": "688516e29e467258532d4ab668185c34262c96f0",
+          "created_at": "2026-09-03T15:36:50Z",
+          "diff_hunk": "@@ -40,11 +45,26 @@ class Claim(PersistedModel):\n     # Frozen: what a reader saw and what is stored can never disagree.\n     created_by_project_id: ID = Field(frozen=True)\n     shape_id: ID = Field(frozen=True)\n+    # The run's own name for the output this was read from.\n+    slug: str = Field(frozen=True)",
+          "body": "what? no no no no no no no no",
+          "themes": [
+            "design_direction",
+            "needless_abstraction"
+          ],
+          "speech_act": "correction",
+          "severity": "blocking",
+          "rule": "Don't add a field that duplicates existing identity fields."
+        },
+        {
+          "html_url": "https://github.com/surveit/carbonpaper/pull/973#discussion_r3926133055",
+          "pr": 973,
+          "thread_id": 3926133055,
+          "path": "app/models/claims.py",
+          "line": 103,
+          "start_line": null,
+          "commit_sha": "688516e29e467258532d4ab668185c34262c96f0",
+          "created_at": "2026-09-03T15:39:29Z",
+          "diff_hunk": "@@ -38,6 +47,64 @@ class ClaimShapeInput(_Base):\n     requires: DataUniverseRequirement\n     importance: ClaimImportance\n     qualifiers: list[str] = []\n+    dimensions: list[DimensionDeclaration] = []\n+\n+\n+class Member(_Base):\n+    \"\"\"Where a claim sits on one axis. The kind decides what else it carries.\"\"\"\n+\n+    kind: str\n+\n+\n+class TermMember(Member):\n+    kind: Literal[\"term\"] = \"term\"\n+    value: str\n+\n+\n+class PointMember(Member):\n+    \"\"\"An as-of instant, for a figure that is a level rather than a flow.\"\"\"\n+\n+    kind: Literal[\"point\"] = \"point\"\n+    at: datetime.datetime\n+\n+\n+class PeriodMember(Member):\n+    \"\"\"Both ends are days the figure counts: 2026-01-01 to 2026-06-30 is two quarters.\"\"\"\n+\n+    kind: Literal[\"period\"] = \"period\"\n+    start: datetime.date\n+    end: datetime.date\n+\n+    @model_validator(mode=\"after\")\n+    def _a_period_does_not_end_before_it_starts(self) -> \"PeriodMember\":\n+        if self.end < self.start:\n+            raise ValueError(f\"period ends {self.end}, before it starts {self.start}\")\n+        return self\n+\n+\n+MemberValue = Annotated[\n+    Union[TermMember, PointMember, PeriodMember], Field(discriminator=\"kind\")\n+]\n+\n+# What an author picks when declaring an axis, and what the form renders for it.\n+TERM_KIND = \"term\"\n+POINT_KIND = \"point\"\n+PERIOD_KIND = \"period\"\n+MEMBER_KINDS: tuple[str, ...] = (TERM_KIND, POINT_KIND, PERIOD_KIND)\n+\n+\n+class DimensionDeclaration(_Base):\n+    \"\"\"An axis every claim of a shape supplies a member for.\"\"\"\n+\n+    name: str\n+    kind: Literal[\"term\", \"point\", \"period\"] = \"term\"\n+\n+\n+class Dimension(_Base):",
+          "body": "No? Just use a basic Schema concept to declare this on the ClaimShape and then validate that any attempts to declare context match the Schema",
+          "themes": [
+            "reinvents_existing"
+          ],
+          "speech_act": "correction",
+          "severity": "blocking",
+          "rule": "Declare dimensions with the existing Schema concept, then validate."
+        },
+        {
+          "html_url": "https://github.com/surveit/carbonpaper/pull/973#discussion_r3926137805",
+          "pr": 973,
+          "thread_id": 3926137805,
+          "path": "app/services/claims.py",
+          "line": 27,
+          "start_line": null,
+          "commit_sha": "688516e29e467258532d4ab668185c34262c96f0",
+          "created_at": "2026-09-03T15:40:02Z",
+          "diff_hunk": "@@ -0,0 +1,383 @@\n+\"\"\"A claim's lifecycle: what a run may publish, what it publishes, and what withdraws it.\"\"\"\n+from __future__ import annotations\n+\n+from pydantic import BaseModel\n+\n+from app.core.ids import ID\n+from app.core.json_types import JsonScalar\n+from app.core.run_status import RunStatus\n+from app.models.claims import (\n+    DataUniverseRequirement,\n+    ClaimStatus,\n+    Dimension,\n+    DimensionDeclaration,\n+    TermMember,\n+    PublishedCitation,\n+    StageOutputCellCitation,\n+)\n+from app.models.records.claims import Claim, ClaimShape\n+from app.models.records.run_manifest import PRODUCTION_RUNS, RunManifest\n+from app.models.records.workflow_output import WorkflowOutput\n+from app.services.claim_shapes import load_claim_shapes\n+from app.services.errors import ClaimMintRefused\n+\n+_PublishedFigure = tuple[WorkflowOutput, StageOutputCellCitation]\n+\n+\n+class RelatedClaim(BaseModel):",
+          "body": "You mean a ... Claim?",
+          "themes": [
+            "needless_abstraction",
+            "naming"
+          ],
+          "speech_act": "correction",
+          "severity": "should",
+          "rule": "Return the existing domain type, not a look-alike model."
+        },
+        {
+          "html_url": "https://github.com/surveit/carbonpaper/pull/973#discussion_r3926141406",
+          "pr": 973,
+          "thread_id": 3926141406,
+          "path": "app/services/claims.py",
+          "line": 39,
+          "start_line": null,
+          "commit_sha": "688516e29e467258532d4ab668185c34262c96f0",
+          "created_at": "2026-09-03T15:40:28Z",
+          "diff_hunk": "@@ -0,0 +1,383 @@\n+\"\"\"A claim's lifecycle: what a run may publish, what it publishes, and what withdraws it.\"\"\"\n+from __future__ import annotations\n+\n+from pydantic import BaseModel\n+\n+from app.core.ids import ID\n+from app.core.json_types import JsonScalar\n+from app.core.run_status import RunStatus\n+from app.models.claims import (\n+    DataUniverseRequirement,\n+    ClaimStatus,\n+    Dimension,\n+    DimensionDeclaration,\n+    TermMember,\n+    PublishedCitation,\n+    StageOutputCellCitation,\n+)\n+from app.models.records.claims import Claim, ClaimShape\n+from app.models.records.run_manifest import PRODUCTION_RUNS, RunManifest\n+from app.models.records.workflow_output import WorkflowOutput\n+from app.services.claim_shapes import load_claim_shapes\n+from app.services.errors import ClaimMintRefused\n+\n+_PublishedFigure = tuple[WorkflowOutput, StageOutputCellCitation]\n+\n+\n+class RelatedClaim(BaseModel):\n+    \"\"\"Another claim of the same shape. The caller diffs its context against the one it means.\"\"\"\n+\n+    claim_id: ID\n+    value: JsonScalar\n+    run_id: ID\n+    stage_id: ID\n+    row_ordinal: int\n+    made_at: str\n+    context: list[Dimension] = []\n+\n+\n+class FigureMint(BaseModel):",
+          "body": "Why is this needed?",
+          "themes": [
+            "needless_abstraction"
+          ],
+          "speech_act": "question",
+          "severity": "should",
+          "rule": "Every new model must justify why it exists."
+        },
+        {
+          "html_url": "https://github.com/surveit/carbonpaper/pull/973#discussion_r3926146754",
+          "pr": 973,
+          "thread_id": 3926146754,
+          "path": "app/services/claims.py",
+          "line": 60,
+          "start_line": null,
+          "commit_sha": "688516e29e467258532d4ab668185c34262c96f0",
+          "created_at": "2026-09-03T15:41:07Z",
+          "diff_hunk": "@@ -0,0 +1,383 @@\n+\"\"\"A claim's lifecycle: what a run may publish, what it publishes, and what withdraws it.\"\"\"\n+from __future__ import annotations\n+\n+from pydantic import BaseModel\n+\n+from app.core.ids import ID\n+from app.core.json_types import JsonScalar\n+from app.core.run_status import RunStatus\n+from app.models.claims import (\n+    DataUniverseRequirement,\n+    ClaimStatus,\n+    Dimension,\n+    DimensionDeclaration,\n+    TermMember,\n+    PublishedCitation,\n+    StageOutputCellCitation,\n+)\n+from app.models.records.claims import Claim, ClaimShape\n+from app.models.records.run_manifest import PRODUCTION_RUNS, RunManifest\n+from app.models.records.workflow_output import WorkflowOutput\n+from app.services.claim_shapes import load_claim_shapes\n+from app.services.errors import ClaimMintRefused\n+\n+_PublishedFigure = tuple[WorkflowOutput, StageOutputCellCitation]\n+\n+\n+class RelatedClaim(BaseModel):\n+    \"\"\"Another claim of the same shape. The caller diffs its context against the one it means.\"\"\"\n+\n+    claim_id: ID\n+    value: JsonScalar\n+    run_id: ID\n+    stage_id: ID\n+    row_ordinal: int\n+    made_at: str\n+    context: list[Dimension] = []\n+\n+\n+class FigureMint(BaseModel):\n+    \"\"\"One of a run's figures that names a claim shape, and whether it can be published.\"\"\"\n+\n+    slug: str\n+    label: str\n+    value: JsonScalar\n+    primary: bool\n+    stage_id: ID\n+    row_ordinal: int\n+    shape_id: ID\n+    requires: str\n+    qualifiers: list[str] = []\n+    dimensions: list[DimensionDeclaration] = []\n+    # Why this figure cannot be minted. None is the only word for \"it can\".\n+    blocked: str | None = None\n+    # This run's own claim for the figure, whatever state it is in.\n+    claim_id: ID | None = None\n+    status: str | None = None\n+    related: list[RelatedClaim] = []\n+\n+\n+class RunTally(BaseModel):",
+          "body": "Okay this is just ClaimCountsForProject",
+          "themes": [
+            "naming"
+          ],
+          "speech_act": "correction",
+          "severity": "should",
+          "rule": "Name a model for what it holds."
+        },
+        {
+          "html_url": "https://github.com/surveit/carbonpaper/pull/973#discussion_r3926155085",
+          "pr": 973,
+          "thread_id": 3926155085,
+          "path": "app/services/claims.py",
+          "line": 95,
+          "start_line": null,
+          "commit_sha": "688516e29e467258532d4ab668185c34262c96f0",
+          "created_at": "2026-09-03T15:42:08Z",
+          "diff_hunk": "@@ -0,0 +1,383 @@\n+\"\"\"A claim's lifecycle: what a run may publish, what it publishes, and what withdraws it.\"\"\"\n+from __future__ import annotations\n+\n+from pydantic import BaseModel\n+\n+from app.core.ids import ID\n+from app.core.json_types import JsonScalar\n+from app.core.run_status import RunStatus\n+from app.models.claims import (\n+    DataUniverseRequirement,\n+    ClaimStatus,\n+    Dimension,\n+    DimensionDeclaration,\n+    TermMember,\n+    PublishedCitation,\n+    StageOutputCellCitation,\n+)\n+from app.models.records.claims import Claim, ClaimShape\n+from app.models.records.run_manifest import PRODUCTION_RUNS, RunManifest\n+from app.models.records.workflow_output import WorkflowOutput\n+from app.services.claim_shapes import load_claim_shapes\n+from app.services.errors import ClaimMintRefused\n+\n+_PublishedFigure = tuple[WorkflowOutput, StageOutputCellCitation]\n+\n+\n+class RelatedClaim(BaseModel):\n+    \"\"\"Another claim of the same shape. The caller diffs its context against the one it means.\"\"\"\n+\n+    claim_id: ID\n+    value: JsonScalar\n+    run_id: ID\n+    stage_id: ID\n+    row_ordinal: int\n+    made_at: str\n+    context: list[Dimension] = []\n+\n+\n+class FigureMint(BaseModel):\n+    \"\"\"One of a run's figures that names a claim shape, and whether it can be published.\"\"\"\n+\n+    slug: str\n+    label: str\n+    value: JsonScalar\n+    primary: bool\n+    stage_id: ID\n+    row_ordinal: int\n+    shape_id: ID\n+    requires: str\n+    qualifiers: list[str] = []\n+    dimensions: list[DimensionDeclaration] = []\n+    # Why this figure cannot be minted. None is the only word for \"it can\".\n+    blocked: str | None = None\n+    # This run's own claim for the figure, whatever state it is in.\n+    claim_id: ID | None = None\n+    status: str | None = None\n+    related: list[RelatedClaim] = []\n+\n+\n+class RunTally(BaseModel):\n+    claimed: int\n+    in_review: int\n+    declined: int\n+    waiting: int\n+    blocked: int\n+\n+\n+def find_run_figures(project_id: ID, run_id: ID) -> list[FigureMint]:\n+    \"\"\"Only the figures whose rule names a shape: naming none is ordinary, not an error.\"\"\"\n+    manifest = _load_manifest(project_id, run_id)\n+    shapes_by_id = {shape.id: shape for shape in load_claim_shapes(project_id)}\n+    read = _ReadOnce(\n+        refused=_find_run_refusal(manifest),\n+        window=_describe_window(manifest),\n+        claims_by_slug=_find_this_runs_claims(project_id, run_id),\n+    )\n+    return [\n+        _describe_figure(output, citation, shapes_by_id[output.shape_id], read)\n+        for output, citation in _read_run_figures(run_id)\n+        if output.shape_id is not None and output.shape_id in shapes_by_id\n+    ]\n+\n+\n+def count_run_decisions(project_id: ID, run_id: ID) -> RunTally:\n+    figures = find_run_figures(project_id, run_id)\n+    return RunTally(\n+        claimed=_count(figures, ClaimStatus.approved),\n+        in_review=_count(figures, ClaimStatus.submitted),\n+        declined=_count(figures, ClaimStatus.declined),\n+        blocked=sum(1 for figure in figures if figure.blocked and figure.status is None),\n+        waiting=sum(1 for figure in figures if _is_waiting(figure)),\n+    )\n+\n+\n+def _count(figures: list[FigureMint], status: ClaimStatus) -> int:",
+          "body": "seems a bit silly. also I'd do len([figure for figure in figures if figure.status == status]) inline is way more idiomatic",
+          "themes": [
+            "needless_abstraction"
+          ],
+          "speech_act": "correction",
+          "severity": "nit",
+          "rule": "Inline trivial helpers; prefer an idiomatic comprehension."
+        },
+        {
+          "html_url": "https://github.com/surveit/carbonpaper/pull/973#discussion_r3926161935",
+          "pr": 973,
+          "thread_id": 3926161935,
+          "path": "app/services/claims.py",
+          "line": 123,
+          "start_line": null,
+          "commit_sha": "688516e29e467258532d4ab668185c34262c96f0",
+          "created_at": "2026-09-03T15:42:57Z",
+          "diff_hunk": "@@ -0,0 +1,383 @@\n+\"\"\"A claim's lifecycle: what a run may publish, what it publishes, and what withdraws it.\"\"\"\n+from __future__ import annotations\n+\n+from pydantic import BaseModel\n+\n+from app.core.ids import ID\n+from app.core.json_types import JsonScalar\n+from app.core.run_status import RunStatus\n+from app.models.claims import (\n+    DataUniverseRequirement,\n+    ClaimStatus,\n+    Dimension,\n+    DimensionDeclaration,\n+    TermMember,\n+    PublishedCitation,\n+    StageOutputCellCitation,\n+)\n+from app.models.records.claims import Claim, ClaimShape\n+from app.models.records.run_manifest import PRODUCTION_RUNS, RunManifest\n+from app.models.records.workflow_output import WorkflowOutput\n+from app.services.claim_shapes import load_claim_shapes\n+from app.services.errors import ClaimMintRefused\n+\n+_PublishedFigure = tuple[WorkflowOutput, StageOutputCellCitation]\n+\n+\n+class RelatedClaim(BaseModel):\n+    \"\"\"Another claim of the same shape. The caller diffs its context against the one it means.\"\"\"\n+\n+    claim_id: ID\n+    value: JsonScalar\n+    run_id: ID\n+    stage_id: ID\n+    row_ordinal: int\n+    made_at: str\n+    context: list[Dimension] = []\n+\n+\n+class FigureMint(BaseModel):\n+    \"\"\"One of a run's figures that names a claim shape, and whether it can be published.\"\"\"\n+\n+    slug: str\n+    label: str\n+    value: JsonScalar\n+    primary: bool\n+    stage_id: ID\n+    row_ordinal: int\n+    shape_id: ID\n+    requires: str\n+    qualifiers: list[str] = []\n+    dimensions: list[DimensionDeclaration] = []\n+    # Why this figure cannot be minted. None is the only word for \"it can\".\n+    blocked: str | None = None\n+    # This run's own claim for the figure, whatever state it is in.\n+    claim_id: ID | None = None\n+    status: str | None = None\n+    related: list[RelatedClaim] = []\n+\n+\n+class RunTally(BaseModel):\n+    claimed: int\n+    in_review: int\n+    declined: int\n+    waiting: int\n+    blocked: int\n+\n+\n+def find_run_figures(project_id: ID, run_id: ID) -> list[FigureMint]:\n+    \"\"\"Only the figures whose rule names a shape: naming none is ordinary, not an error.\"\"\"\n+    manifest = _load_manifest(project_id, run_id)\n+    shapes_by_id = {shape.id: shape for shape in load_claim_shapes(project_id)}\n+    read = _ReadOnce(\n+        refused=_find_run_refusal(manifest),\n+        window=_describe_window(manifest),\n+        claims_by_slug=_find_this_runs_claims(project_id, run_id),\n+    )\n+    return [\n+        _describe_figure(output, citation, shapes_by_id[output.shape_id], read)\n+        for output, citation in _read_run_figures(run_id)\n+        if output.shape_id is not None and output.shape_id in shapes_by_id\n+    ]\n+\n+\n+def count_run_decisions(project_id: ID, run_id: ID) -> RunTally:\n+    figures = find_run_figures(project_id, run_id)\n+    return RunTally(\n+        claimed=_count(figures, ClaimStatus.approved),\n+        in_review=_count(figures, ClaimStatus.submitted),\n+        declined=_count(figures, ClaimStatus.declined),\n+        blocked=sum(1 for figure in figures if figure.blocked and figure.status is None),\n+        waiting=sum(1 for figure in figures if _is_waiting(figure)),\n+    )\n+\n+\n+def _count(figures: list[FigureMint], status: ClaimStatus) -> int:\n+    return sum(1 for figure in figures if figure.status == status)\n+\n+\n+def submit_for_review(\n+    project_id: ID, run_id: ID, slug: str, context: list[Dimension]\n+) -> Claim:\n+    \"\"\"A claim proposed. It stands behind nothing until review approves it.\"\"\"\n+    figure = _find_figure(project_id, run_id, slug)\n+    refusals = _find_mint_refusals(figure, context)\n+    if refusals:\n+        raise ClaimMintRefused(refusals)\n+    output, citation = _find_published_figure(run_id, slug)\n+    claim = Claim(\n+        created_by_project_id=project_id,\n+        shape_id=_require_shape_id(output),\n+        slug=slug,\n+        context=context,\n+        citation=citation,\n+    )\n+    claim.save()\n+    return claim\n+\n+\n+def approve_claim(project_id: ID, claim_id: ID) -> Claim:\n+    \"\"\"Re-checks before it stands: what was in the way can move while it waits.\"\"\"\n+    claim = _load_claim(project_id, claim_id)\n+    figure = _find_figure(project_id, claim.citation.run_id, claim.slug)\n+    refusals = _find_mint_refusals(figure, claim.context)",
+          "body": "what on earth is a mint? and what are figures? reject all isntances of both words. You can debate me on what should or shouldn't replace them.",
+          "themes": [
+            "vocabulary"
+          ],
+          "speech_act": "instruction",
+          "severity": "blocking",
+          "rule": "Ban invented jargon (mint, figure); use established vocabulary."
+        },
+        {
+          "html_url": "https://github.com/surveit/carbonpaper/pull/973#discussion_r3926164738",
+          "pr": 973,
+          "thread_id": 3926164738,
+          "path": "app/services/claims.py",
+          "line": 134,
+          "start_line": null,
+          "commit_sha": "688516e29e467258532d4ab668185c34262c96f0",
+          "created_at": "2026-09-03T15:43:17Z",
+          "diff_hunk": "@@ -0,0 +1,383 @@\n+\"\"\"A claim's lifecycle: what a run may publish, what it publishes, and what withdraws it.\"\"\"\n+from __future__ import annotations\n+\n+from pydantic import BaseModel\n+\n+from app.core.ids import ID\n+from app.core.json_types import JsonScalar\n+from app.core.run_status import RunStatus\n+from app.models.claims import (\n+    DataUniverseRequirement,\n+    ClaimStatus,\n+    Dimension,\n+    DimensionDeclaration,\n+    TermMember,\n+    PublishedCitation,\n+    StageOutputCellCitation,\n+)\n+from app.models.records.claims import Claim, ClaimShape\n+from app.models.records.run_manifest import PRODUCTION_RUNS, RunManifest\n+from app.models.records.workflow_output import WorkflowOutput\n+from app.services.claim_shapes import load_claim_shapes\n+from app.services.errors import ClaimMintRefused\n+\n+_PublishedFigure = tuple[WorkflowOutput, StageOutputCellCitation]\n+\n+\n+class RelatedClaim(BaseModel):\n+    \"\"\"Another claim of the same shape. The caller diffs its context against the one it means.\"\"\"\n+\n+    claim_id: ID\n+    value: JsonScalar\n+    run_id: ID\n+    stage_id: ID\n+    row_ordinal: int\n+    made_at: str\n+    context: list[Dimension] = []\n+\n+\n+class FigureMint(BaseModel):\n+    \"\"\"One of a run's figures that names a claim shape, and whether it can be published.\"\"\"\n+\n+    slug: str\n+    label: str\n+    value: JsonScalar\n+    primary: bool\n+    stage_id: ID\n+    row_ordinal: int\n+    shape_id: ID\n+    requires: str\n+    qualifiers: list[str] = []\n+    dimensions: list[DimensionDeclaration] = []\n+    # Why this figure cannot be minted. None is the only word for \"it can\".\n+    blocked: str | None = None\n+    # This run's own claim for the figure, whatever state it is in.\n+    claim_id: ID | None = None\n+    status: str | None = None\n+    related: list[RelatedClaim] = []\n+\n+\n+class RunTally(BaseModel):\n+    claimed: int\n+    in_review: int\n+    declined: int\n+    waiting: int\n+    blocked: int\n+\n+\n+def find_run_figures(project_id: ID, run_id: ID) -> list[FigureMint]:\n+    \"\"\"Only the figures whose rule names a shape: naming none is ordinary, not an error.\"\"\"\n+    manifest = _load_manifest(project_id, run_id)\n+    shapes_by_id = {shape.id: shape for shape in load_claim_shapes(project_id)}\n+    read = _ReadOnce(\n+        refused=_find_run_refusal(manifest),\n+        window=_describe_window(manifest),\n+        claims_by_slug=_find_this_runs_claims(project_id, run_id),\n+    )\n+    return [\n+        _describe_figure(output, citation, shapes_by_id[output.shape_id], read)\n+        for output, citation in _read_run_figures(run_id)\n+        if output.shape_id is not None and output.shape_id in shapes_by_id\n+    ]\n+\n+\n+def count_run_decisions(project_id: ID, run_id: ID) -> RunTally:\n+    figures = find_run_figures(project_id, run_id)\n+    return RunTally(\n+        claimed=_count(figures, ClaimStatus.approved),\n+        in_review=_count(figures, ClaimStatus.submitted),\n+        declined=_count(figures, ClaimStatus.declined),\n+        blocked=sum(1 for figure in figures if figure.blocked and figure.status is None),\n+        waiting=sum(1 for figure in figures if _is_waiting(figure)),\n+    )\n+\n+\n+def _count(figures: list[FigureMint], status: ClaimStatus) -> int:\n+    return sum(1 for figure in figures if figure.status == status)\n+\n+\n+def submit_for_review(\n+    project_id: ID, run_id: ID, slug: str, context: list[Dimension]\n+) -> Claim:\n+    \"\"\"A claim proposed. It stands behind nothing until review approves it.\"\"\"\n+    figure = _find_figure(project_id, run_id, slug)\n+    refusals = _find_mint_refusals(figure, context)\n+    if refusals:\n+        raise ClaimMintRefused(refusals)\n+    output, citation = _find_published_figure(run_id, slug)\n+    claim = Claim(\n+        created_by_project_id=project_id,\n+        shape_id=_require_shape_id(output),\n+        slug=slug,\n+        context=context,\n+        citation=citation,\n+    )\n+    claim.save()\n+    return claim\n+\n+\n+def approve_claim(project_id: ID, claim_id: ID) -> Claim:\n+    \"\"\"Re-checks before it stands: what was in the way can move while it waits.\"\"\"\n+    claim = _load_claim(project_id, claim_id)\n+    figure = _find_figure(project_id, claim.citation.run_id, claim.slug)\n+    refusals = _find_mint_refusals(figure, claim.context)\n+    if refusals:\n+        raise ClaimMintRefused(refusals)\n+    return _move_to(claim, ClaimStatus.approved)\n+\n+\n+def decline_claim(project_id: ID, claim_id: ID) -> Claim:\n+    \"\"\"Review said no. The claim stays, saying so, rather than vanishing.\"\"\"\n+    return _move_to(_load_claim(project_id, claim_id), ClaimStatus.declined)\n+\n+\n+def decline_figure(project_id: ID, run_id: ID, slug: str) -> Claim:",
+          "body": "decline_claim / decline_figure -- this is very confusing when a figure is not clear",
+          "themes": [
+            "naming",
+            "vocabulary"
+          ],
+          "speech_act": "correction",
+          "severity": "should",
+          "rule": "Parallel function names must name clearly distinct things."
+        },
+        {
+          "html_url": "https://github.com/surveit/carbonpaper/pull/973#discussion_r3926170291",
+          "pr": 973,
+          "thread_id": 3926170291,
+          "path": "app/services/claims.py",
+          "line": 201,
+          "start_line": null,
+          "commit_sha": "688516e29e467258532d4ab668185c34262c96f0",
+          "created_at": "2026-09-03T15:43:55Z",
+          "diff_hunk": "@@ -0,0 +1,383 @@\n+\"\"\"A claim's lifecycle: what a run may publish, what it publishes, and what withdraws it.\"\"\"\n+from __future__ import annotations\n+\n+from pydantic import BaseModel\n+\n+from app.core.ids import ID\n+from app.core.json_types import JsonScalar\n+from app.core.run_status import RunStatus\n+from app.models.claims import (\n+    DataUniverseRequirement,\n+    ClaimStatus,\n+    Dimension,\n+    DimensionDeclaration,\n+    TermMember,\n+    PublishedCitation,\n+    StageOutputCellCitation,\n+)\n+from app.models.records.claims import Claim, ClaimShape\n+from app.models.records.run_manifest import PRODUCTION_RUNS, RunManifest\n+from app.models.records.workflow_output import WorkflowOutput\n+from app.services.claim_shapes import load_claim_shapes\n+from app.services.errors import ClaimMintRefused\n+\n+_PublishedFigure = tuple[WorkflowOutput, StageOutputCellCitation]\n+\n+\n+class RelatedClaim(BaseModel):\n+    \"\"\"Another claim of the same shape. The caller diffs its context against the one it means.\"\"\"\n+\n+    claim_id: ID\n+    value: JsonScalar\n+    run_id: ID\n+    stage_id: ID\n+    row_ordinal: int\n+    made_at: str\n+    context: list[Dimension] = []\n+\n+\n+class FigureMint(BaseModel):\n+    \"\"\"One of a run's figures that names a claim shape, and whether it can be published.\"\"\"\n+\n+    slug: str\n+    label: str\n+    value: JsonScalar\n+    primary: bool\n+    stage_id: ID\n+    row_ordinal: int\n+    shape_id: ID\n+    requires: str\n+    qualifiers: list[str] = []\n+    dimensions: list[DimensionDeclaration] = []\n+    # Why this figure cannot be minted. None is the only word for \"it can\".\n+    blocked: str | None = None\n+    # This run's own claim for the figure, whatever state it is in.\n+    claim_id: ID | None = None\n+    status: str | None = None\n+    related: list[RelatedClaim] = []\n+\n+\n+class RunTally(BaseModel):\n+    claimed: int\n+    in_review: int\n+    declined: int\n+    waiting: int\n+    blocked: int\n+\n+\n+def find_run_figures(project_id: ID, run_id: ID) -> list[FigureMint]:\n+    \"\"\"Only the figures whose rule names a shape: naming none is ordinary, not an error.\"\"\"\n+    manifest = _load_manifest(project_id, run_id)\n+    shapes_by_id = {shape.id: shape for shape in load_claim_shapes(project_id)}\n+    read = _ReadOnce(\n+        refused=_find_run_refusal(manifest),\n+        window=_describe_window(manifest),\n+        claims_by_slug=_find_this_runs_claims(project_id, run_id),\n+    )\n+    return [\n+        _describe_figure(output, citation, shapes_by_id[output.shape_id], read)\n+        for output, citation in _read_run_figures(run_id)\n+        if output.shape_id is not None and output.shape_id in shapes_by_id\n+    ]\n+\n+\n+def count_run_decisions(project_id: ID, run_id: ID) -> RunTally:\n+    figures = find_run_figures(project_id, run_id)\n+    return RunTally(\n+        claimed=_count(figures, ClaimStatus.approved),\n+        in_review=_count(figures, ClaimStatus.submitted),\n+        declined=_count(figures, ClaimStatus.declined),\n+        blocked=sum(1 for figure in figures if figure.blocked and figure.status is None),\n+        waiting=sum(1 for figure in figures if _is_waiting(figure)),\n+    )\n+\n+\n+def _count(figures: list[FigureMint], status: ClaimStatus) -> int:\n+    return sum(1 for figure in figures if figure.status == status)\n+\n+\n+def submit_for_review(\n+    project_id: ID, run_id: ID, slug: str, context: list[Dimension]\n+) -> Claim:\n+    \"\"\"A claim proposed. It stands behind nothing until review approves it.\"\"\"\n+    figure = _find_figure(project_id, run_id, slug)\n+    refusals = _find_mint_refusals(figure, context)\n+    if refusals:\n+        raise ClaimMintRefused(refusals)\n+    output, citation = _find_published_figure(run_id, slug)\n+    claim = Claim(\n+        created_by_project_id=project_id,\n+        shape_id=_require_shape_id(output),\n+        slug=slug,\n+        context=context,\n+        citation=citation,\n+    )\n+    claim.save()\n+    return claim\n+\n+\n+def approve_claim(project_id: ID, claim_id: ID) -> Claim:\n+    \"\"\"Re-checks before it stands: what was in the way can move while it waits.\"\"\"\n+    claim = _load_claim(project_id, claim_id)\n+    figure = _find_figure(project_id, claim.citation.run_id, claim.slug)\n+    refusals = _find_mint_refusals(figure, claim.context)\n+    if refusals:\n+        raise ClaimMintRefused(refusals)\n+    return _move_to(claim, ClaimStatus.approved)\n+\n+\n+def decline_claim(project_id: ID, claim_id: ID) -> Claim:\n+    \"\"\"Review said no. The claim stays, saying so, rather than vanishing.\"\"\"\n+    return _move_to(_load_claim(project_id, claim_id), ClaimStatus.declined)\n+\n+\n+def decline_figure(project_id: ID, run_id: ID, slug: str) -> Claim:\n+    \"\"\"A skip: proposed and refused in one act, so the run's tally still adds up.\"\"\"\n+    figure = _find_figure(project_id, run_id, slug)\n+    if figure.claim_id is not None:\n+        return decline_claim(project_id, figure.claim_id)\n+    output, citation = _find_published_figure(run_id, slug)\n+    claim = Claim(\n+        created_by_project_id=project_id,\n+        shape_id=_require_shape_id(output),\n+        slug=slug,\n+        citation=citation,\n+        status=ClaimStatus.declined,\n+    )\n+    claim.save()\n+    return claim\n+\n+\n+def _move_to(claim: Claim, status: ClaimStatus) -> Claim:\n+    claim.status = status\n+    claim.save()\n+    return claim\n+\n+\n+def _require_shape_id(output: WorkflowOutput) -> ID:\n+    if output.shape_id is None:\n+        raise ClaimMintRefused([f\"'{output.slug}' names no claim shape\"])\n+    return output.shape_id\n+\n+\n+def _load_claim(project_id: ID, claim_id: ID) -> Claim:\n+    held = Claim.load_or_none(claim_id)\n+    if held is None or held.created_by_project_id != project_id:\n+        raise ClaimMintRefused([f\"this project holds no claim '{claim_id}'\"])\n+    return held\n+\n+\n+\n+def find_declared_dimensions(\n+    project_id: ID, run_id: ID, slug: str\n+) -> list[DimensionDeclaration]:\n+    return _find_figure(project_id, run_id, slug).dimensions\n+\n+\n+def find_terms_used(project_id: ID, dimension: str) -> list[str]:\n+    \"\"\"The words already written on a term axis, so the next claim reuses one instead of a variant.\"\"\"\n+    return sorted({\n+        held.member.value\n+        for claim in Claim.find(created_by_project_id=project_id)\n+        for held in claim.context\n+        if held.name == dimension and isinstance(held.member, TermMember)\n+    })\n+\n+\n+def find_context_differences(\n+    context: list[Dimension], against: list[Dimension]\n+) -> list[Dimension]:\n+    \"\"\"What `context` holds that `against` does not. Empty means the two are one fact.\"\"\"\n+    held = {dimension.name: dimension.member for dimension in against}\n+    return [\n+        dimension for dimension in context\n+        if held.get(dimension.name) != dimension.member\n+    ]\n+\n+\n+# ─── what stands in the way ──────────────────────────────────────────────────\n+\n+\n+class _ReadOnce(BaseModel):",
+          "body": "What on earth is this thing?",
+          "themes": [
+            "needless_abstraction",
+            "naming"
+          ],
+          "speech_act": "question",
+          "severity": "should",
+          "rule": "A private model needs an obvious reason and a clear name."
+        },
+        {
+          "html_url": "https://github.com/surveit/carbonpaper/pull/973#discussion_r3926177140",
+          "pr": 973,
+          "thread_id": 3926177140,
+          "path": "app/services/claims.py",
+          "line": 217,
+          "start_line": null,
+          "commit_sha": "d43850f79a75135def77e7cd3d5d1cf017d13d7c",
+          "created_at": "2026-09-03T15:44:43Z",
+          "diff_hunk": "@@ -0,0 +1,377 @@\n+\"\"\"A claim's lifecycle: what a run may publish, what it publishes, and what withdraws it.\"\"\"\n+from __future__ import annotations\n+\n+from pydantic import BaseModel\n+\n+from app.core.ids import ID\n+from app.core.json_types import JsonScalar\n+from app.core.run_status import RunStatus\n+from app.models.claims import (\n+    DataUniverseRequirement,\n+    ClaimStatus,\n+    Dimension,\n+    DimensionDeclaration,\n+    TermMember,\n+    PublishedCitation,\n+    StageOutputCellCitation,\n+)\n+from app.models.records.claims import Claim, ClaimShape\n+from app.models.records.run_manifest import PRODUCTION_RUNS, RunManifest\n+from app.models.records.workflow_output import WorkflowOutput\n+from app.services.claim_shapes import load_claim_shapes\n+from app.services.errors import ClaimMintRefused\n+\n+_PublishedFigure = tuple[WorkflowOutput, StageOutputCellCitation]\n+\n+\n+class RelatedClaim(BaseModel):\n+    \"\"\"Another claim of the same shape. The caller diffs its context against the one it means.\"\"\"\n+\n+    claim_id: ID\n+    value: JsonScalar\n+    run_id: ID\n+    stage_id: ID\n+    row_ordinal: int\n+    made_at: str\n+    context: list[Dimension] = []\n+\n+\n+class FigureMint(BaseModel):\n+    \"\"\"One of a run's figures that names a claim shape, and whether it can be published.\"\"\"\n+\n+    slug: str\n+    label: str\n+    value: JsonScalar\n+    primary: bool\n+    stage_id: ID\n+    row_ordinal: int\n+    shape_id: ID\n+    requires: str\n+    qualifiers: list[str] = []\n+    dimensions: list[DimensionDeclaration] = []\n+    # Why this figure cannot be minted. None is the only word for \"it can\".\n+    blocked: str | None = None\n+    # This run's own claim for the figure, whatever state it is in.\n+    claim_id: ID | None = None\n+    status: str | None = None\n+    related: list[RelatedClaim] = []\n+\n+\n+class RunTally(BaseModel):\n+    claimed: int\n+    in_review: int\n+    declined: int\n+    waiting: int\n+    blocked: int\n+\n+\n+def find_run_figures(project_id: ID, run_id: ID) -> list[FigureMint]:\n+    \"\"\"Only the figures whose rule names a shape: naming none is ordinary, not an error.\"\"\"\n+    manifest = _load_manifest(project_id, run_id)\n+    shapes_by_id = {shape.id: shape for shape in load_claim_shapes(project_id)}\n+    read = _ReadOnce(\n+        refused=_find_run_refusal(manifest),\n+        window=_describe_window(manifest),\n+        claims_by_slug=_find_this_runs_claims(project_id, run_id),\n+    )\n+    return [\n+        _describe_figure(output, citation, shapes_by_id[output.shape_id], read)\n+        for output, citation in _read_run_figures(run_id)\n+        if output.shape_id is not None and output.shape_id in shapes_by_id\n+    ]\n+\n+\n+def count_run_decisions(project_id: ID, run_id: ID) -> RunTally:\n+    figures = find_run_figures(project_id, run_id)\n+    return RunTally(\n+        claimed=_count(figures, ClaimStatus.approved),\n+        in_review=_count(figures, ClaimStatus.submitted),\n+        declined=_count(figures, ClaimStatus.declined),\n+        blocked=sum(1 for figure in figures if figure.blocked and figure.status is None),\n+        waiting=sum(1 for figure in figures if _is_waiting(figure)),\n+    )\n+\n+\n+def _count(figures: list[FigureMint], status: ClaimStatus) -> int:\n+    return sum(1 for figure in figures if figure.status == status)\n+\n+\n+def submit_for_review(\n+    project_id: ID, run_id: ID, slug: str, context: list[Dimension]\n+) -> Claim:\n+    \"\"\"A claim proposed. It stands behind nothing until review approves it.\"\"\"\n+    figure = _find_figure(project_id, run_id, slug)\n+    refusals = _find_mint_refusals(figure, context)\n+    if refusals:\n+        raise ClaimMintRefused(refusals)\n+    output, citation = _find_published_figure(run_id, slug)\n+    claim = Claim(\n+        created_by_project_id=project_id,\n+        shape_id=_require_shape_id(output),\n+        slug=slug,\n+        context=context,\n+        citation=citation,\n+    )\n+    claim.save()\n+    return claim\n+\n+\n+def approve_claim(project_id: ID, claim_id: ID) -> Claim:\n+    \"\"\"Re-checks before it stands: what was in the way can move while it waits.\"\"\"\n+    claim = _load_claim(project_id, claim_id)\n+    figure = _find_figure(project_id, claim.citation.run_id, claim.slug)\n+    refusals = _find_mint_refusals(figure, claim.context)\n+    if refusals:\n+        raise ClaimMintRefused(refusals)\n+    claim.status = ClaimStatus.approved\n+    claim.save()\n+    return claim\n+\n+\n+def decline_claim(project_id: ID, claim_id: ID) -> Claim:\n+    \"\"\"Review said no. The claim stays, saying so, rather than vanishing.\"\"\"\n+    claim = _load_claim(project_id, claim_id)\n+    claim.status = ClaimStatus.declined\n+    claim.save()\n+    return claim\n+\n+\n+def decline_figure(project_id: ID, run_id: ID, slug: str) -> Claim:\n+    \"\"\"A skip: proposed and refused in one act, so the run's tally still adds up.\"\"\"\n+    figure = _find_figure(project_id, run_id, slug)\n+    if figure.claim_id is not None:\n+        return decline_claim(project_id, figure.claim_id)\n+    output, citation = _find_published_figure(run_id, slug)\n+    claim = Claim(\n+        created_by_project_id=project_id,\n+        shape_id=_require_shape_id(output),\n+        slug=slug,\n+        citation=citation,\n+        status=ClaimStatus.declined,\n+    )\n+    claim.save()\n+    return claim\n+\n+\n+\n+def _require_shape_id(output: WorkflowOutput) -> ID:\n+    if output.shape_id is None:\n+        raise ClaimMintRefused([f\"'{output.slug}' names no claim shape\"])\n+    return output.shape_id\n+\n+\n+def _load_claim(project_id: ID, claim_id: ID) -> Claim:\n+    held = Claim.load_or_none(claim_id)\n+    if held is None or held.created_by_project_id != project_id:\n+        raise ClaimMintRefused([f\"this project holds no claim '{claim_id}'\"])\n+    return held\n+\n+\n+\n+def find_declared_dimensions(\n+    project_id: ID, run_id: ID, slug: str\n+) -> list[DimensionDeclaration]:\n+    return _find_figure(project_id, run_id, slug).dimensions\n+\n+\n+def find_terms_used(project_id: ID, dimension: str) -> list[str]:\n+    \"\"\"The words already written on a term axis, so the next claim reuses one instead of a variant.\"\"\"\n+    return sorted({\n+        held.member.value\n+        for claim in Claim.find(created_by_project_id=project_id)\n+        for held in claim.context\n+        if held.name == dimension and isinstance(held.member, TermMember)\n+    })\n+\n+\n+def find_context_differences(\n+    context: list[Dimension], against: list[Dimension]\n+) -> list[Dimension]:\n+    \"\"\"What `context` holds that `against` does not. Empty means the two are one fact.\"\"\"\n+    held = {dimension.name: dimension.member for dimension in against}\n+    return [\n+        dimension for dimension in context\n+        if held.get(dimension.name) != dimension.member\n+    ]\n+\n+\n+# ─── what stands in the way ──────────────────────────────────────────────────\n+\n+\n+class _ReadOnce(BaseModel):\n+    \"\"\"The per-run facts every figure on the page shares, read once rather than per figure.\"\"\"\n+\n+    refused: str | None\n+    window: str | None\n+    claims_by_slug: dict[str, Claim]\n+\n+\n+def _find_run_refusal(manifest: RunManifest) -> str | None:\n+    if manifest.status != RunStatus.OK:\n+        return _describe_incompleteness(manifest.status)\n+    if not manifest.workflow_version:\n+        return \"This run does not record the version that produced it.\"\n+    return None\n+\n+\n+def _describe_incompleteness(status: str) -> str:",
+          "body": "these functions don't belong here 100%. Either go to web or they are fundamental to the run service. No reason whatsoever for claims to be describing run statuses.",
+          "themes": [
+            "code_placement"
+          ],
+          "speech_act": "correction",
+          "severity": "blocking",
+          "rule": "A service must not describe another domain's statuses."
+        },
+        {
+          "html_url": "https://github.com/surveit/carbonpaper/pull/973#discussion_r3926188960",
+          "pr": 973,
+          "thread_id": 3926188960,
+          "path": "app/services/claims.py",
+          "line": 258,
+          "start_line": null,
+          "commit_sha": "d43850f79a75135def77e7cd3d5d1cf017d13d7c",
+          "created_at": "2026-09-03T15:46:01Z",
+          "diff_hunk": "@@ -0,0 +1,377 @@\n+\"\"\"A claim's lifecycle: what a run may publish, what it publishes, and what withdraws it.\"\"\"\n+from __future__ import annotations\n+\n+from pydantic import BaseModel\n+\n+from app.core.ids import ID\n+from app.core.json_types import JsonScalar\n+from app.core.run_status import RunStatus\n+from app.models.claims import (\n+    DataUniverseRequirement,\n+    ClaimStatus,\n+    Dimension,\n+    DimensionDeclaration,\n+    TermMember,\n+    PublishedCitation,\n+    StageOutputCellCitation,\n+)\n+from app.models.records.claims import Claim, ClaimShape\n+from app.models.records.run_manifest import PRODUCTION_RUNS, RunManifest\n+from app.models.records.workflow_output import WorkflowOutput\n+from app.services.claim_shapes import load_claim_shapes\n+from app.services.errors import ClaimMintRefused\n+\n+_PublishedFigure = tuple[WorkflowOutput, StageOutputCellCitation]\n+\n+\n+class RelatedClaim(BaseModel):\n+    \"\"\"Another claim of the same shape. The caller diffs its context against the one it means.\"\"\"\n+\n+    claim_id: ID\n+    value: JsonScalar\n+    run_id: ID\n+    stage_id: ID\n+    row_ordinal: int\n+    made_at: str\n+    context: list[Dimension] = []\n+\n+\n+class FigureMint(BaseModel):\n+    \"\"\"One of a run's figures that names a claim shape, and whether it can be published.\"\"\"\n+\n+    slug: str\n+    label: str\n+    value: JsonScalar\n+    primary: bool\n+    stage_id: ID\n+    row_ordinal: int\n+    shape_id: ID\n+    requires: str\n+    qualifiers: list[str] = []\n+    dimensions: list[DimensionDeclaration] = []\n+    # Why this figure cannot be minted. None is the only word for \"it can\".\n+    blocked: str | None = None\n+    # This run's own claim for the figure, whatever state it is in.\n+    claim_id: ID | None = None\n+    status: str | None = None\n+    related: list[RelatedClaim] = []\n+\n+\n+class RunTally(BaseModel):\n+    claimed: int\n+    in_review: int\n+    declined: int\n+    waiting: int\n+    blocked: int\n+\n+\n+def find_run_figures(project_id: ID, run_id: ID) -> list[FigureMint]:\n+    \"\"\"Only the figures whose rule names a shape: naming none is ordinary, not an error.\"\"\"\n+    manifest = _load_manifest(project_id, run_id)\n+    shapes_by_id = {shape.id: shape for shape in load_claim_shapes(project_id)}\n+    read = _ReadOnce(\n+        refused=_find_run_refusal(manifest),\n+        window=_describe_window(manifest),\n+        claims_by_slug=_find_this_runs_claims(project_id, run_id),\n+    )\n+    return [\n+        _describe_figure(output, citation, shapes_by_id[output.shape_id], read)\n+        for output, citation in _read_run_figures(run_id)\n+        if output.shape_id is not None and output.shape_id in shapes_by_id\n+    ]\n+\n+\n+def count_run_decisions(project_id: ID, run_id: ID) -> RunTally:\n+    figures = find_run_figures(project_id, run_id)\n+    return RunTally(\n+        claimed=_count(figures, ClaimStatus.approved),\n+        in_review=_count(figures, ClaimStatus.submitted),\n+        declined=_count(figures, ClaimStatus.declined),\n+        blocked=sum(1 for figure in figures if figure.blocked and figure.status is None),\n+        waiting=sum(1 for figure in figures if _is_waiting(figure)),\n+    )\n+\n+\n+def _count(figures: list[FigureMint], status: ClaimStatus) -> int:\n+    return sum(1 for figure in figures if figure.status == status)\n+\n+\n+def submit_for_review(\n+    project_id: ID, run_id: ID, slug: str, context: list[Dimension]\n+) -> Claim:\n+    \"\"\"A claim proposed. It stands behind nothing until review approves it.\"\"\"\n+    figure = _find_figure(project_id, run_id, slug)\n+    refusals = _find_mint_refusals(figure, context)\n+    if refusals:\n+        raise ClaimMintRefused(refusals)\n+    output, citation = _find_published_figure(run_id, slug)\n+    claim = Claim(\n+        created_by_project_id=project_id,\n+        shape_id=_require_shape_id(output),\n+        slug=slug,\n+        context=context,\n+        citation=citation,\n+    )\n+    claim.save()\n+    return claim\n+\n+\n+def approve_claim(project_id: ID, claim_id: ID) -> Claim:\n+    \"\"\"Re-checks before it stands: what was in the way can move while it waits.\"\"\"\n+    claim = _load_claim(project_id, claim_id)\n+    figure = _find_figure(project_id, claim.citation.run_id, claim.slug)\n+    refusals = _find_mint_refusals(figure, claim.context)\n+    if refusals:\n+        raise ClaimMintRefused(refusals)\n+    claim.status = ClaimStatus.approved\n+    claim.save()\n+    return claim\n+\n+\n+def decline_claim(project_id: ID, claim_id: ID) -> Claim:\n+    \"\"\"Review said no. The claim stays, saying so, rather than vanishing.\"\"\"\n+    claim = _load_claim(project_id, claim_id)\n+    claim.status = ClaimStatus.declined\n+    claim.save()\n+    return claim\n+\n+\n+def decline_figure(project_id: ID, run_id: ID, slug: str) -> Claim:\n+    \"\"\"A skip: proposed and refused in one act, so the run's tally still adds up.\"\"\"\n+    figure = _find_figure(project_id, run_id, slug)\n+    if figure.claim_id is not None:\n+        return decline_claim(project_id, figure.claim_id)\n+    output, citation = _find_published_figure(run_id, slug)\n+    claim = Claim(\n+        created_by_project_id=project_id,\n+        shape_id=_require_shape_id(output),\n+        slug=slug,\n+        citation=citation,\n+        status=ClaimStatus.declined,\n+    )\n+    claim.save()\n+    return claim\n+\n+\n+\n+def _require_shape_id(output: WorkflowOutput) -> ID:\n+    if output.shape_id is None:\n+        raise ClaimMintRefused([f\"'{output.slug}' names no claim shape\"])\n+    return output.shape_id\n+\n+\n+def _load_claim(project_id: ID, claim_id: ID) -> Claim:\n+    held = Claim.load_or_none(claim_id)\n+    if held is None or held.created_by_project_id != project_id:\n+        raise ClaimMintRefused([f\"this project holds no claim '{claim_id}'\"])\n+    return held\n+\n+\n+\n+def find_declared_dimensions(\n+    project_id: ID, run_id: ID, slug: str\n+) -> list[DimensionDeclaration]:\n+    return _find_figure(project_id, run_id, slug).dimensions\n+\n+\n+def find_terms_used(project_id: ID, dimension: str) -> list[str]:\n+    \"\"\"The words already written on a term axis, so the next claim reuses one instead of a variant.\"\"\"\n+    return sorted({\n+        held.member.value\n+        for claim in Claim.find(created_by_project_id=project_id)\n+        for held in claim.context\n+        if held.name == dimension and isinstance(held.member, TermMember)\n+    })\n+\n+\n+def find_context_differences(\n+    context: list[Dimension], against: list[Dimension]\n+) -> list[Dimension]:\n+    \"\"\"What `context` holds that `against` does not. Empty means the two are one fact.\"\"\"\n+    held = {dimension.name: dimension.member for dimension in against}\n+    return [\n+        dimension for dimension in context\n+        if held.get(dimension.name) != dimension.member\n+    ]\n+\n+\n+# ─── what stands in the way ──────────────────────────────────────────────────\n+\n+\n+class _ReadOnce(BaseModel):\n+    \"\"\"The per-run facts every figure on the page shares, read once rather than per figure.\"\"\"\n+\n+    refused: str | None\n+    window: str | None\n+    claims_by_slug: dict[str, Claim]\n+\n+\n+def _find_run_refusal(manifest: RunManifest) -> str | None:\n+    if manifest.status != RunStatus.OK:\n+        return _describe_incompleteness(manifest.status)\n+    if not manifest.workflow_version:\n+        return \"This run does not record the version that produced it.\"\n+    return None\n+\n+\n+def _describe_incompleteness(status: str) -> str:\n+    if status == RunStatus.RUNNING:\n+        return \"This run has not completed.\"\n+    return f\"This run ended {status or 'unknown'}, so its figures are not the answer.\"\n+\n+\n+def _describe_window(manifest: RunManifest) -> str | None:\n+    \"\"\"What made this run read a slice of the rows rather than all of them.\"\"\"\n+    if manifest.parameters.is_test_run:\n+        return \"This was a test run, so it read a window of the rows\"\n+    capped = sorted(manifest.parameters.limits.items())\n+    if not capped:\n+        return None\n+    named = \", \".join(f\"{stage} (first {cap:,} rows)\" for stage, cap in capped)\n+    return f\"{named} read a window of its input\"\n+\n+\n+def _find_coverage_refusal(shape: ClaimShape, window: str | None) -> str | None:\n+    if window is None or shape.requires == DataUniverseRequirement.open:\n+        return None\n+    return f\"{window}, and totalling a slice turns 'is' into 'at least'.\"\n+\n+\n+def _find_mint_refusals(figure: FigureMint, context: list[Dimension]) -> list[str]:\n+    declared = {axis.name for axis in figure.dimensions}\n+    sent = {held.name for held in context}\n+    missing = sorted(declared - sent)\n+    undeclared = sorted(sent - declared)\n+    blank = sorted(\n+        held.name for held in context\n+        if isinstance(held.member, TermMember) and not held.member.value.strip()\n+    )\n+    return [\n+        *([figure.blocked] if figure.blocked else []),\n+        *([f\"this claim gives no member for {missing}\"] if missing else []),\n+        *([f\"this shape declares no dimension {undeclared}\"] if undeclared else []),\n+        *([f\"the member for {blank} was left empty\"] if blank else []),\n+        *_find_restatements(figure, context),\n+    ]\n+\n+\n+def _find_restatements(figure: FigureMint, context: list[Dimension]) -> list[str]:",
+          "body": "how isn't this giving back a list of Claims? and it should just be find equivalent Claims?",
+          "themes": [
+            "naming",
+            "needless_abstraction"
+          ],
+          "speech_act": "correction",
+          "severity": "should",
+          "rule": "Return domain objects, not message strings; name by what's found."
+        },
+        {
+          "html_url": "https://github.com/surveit/carbonpaper/pull/973#discussion_r3926192542",
+          "pr": 973,
+          "thread_id": 3926192542,
+          "path": "app/services/claims.py",
+          "line": 268,
+          "start_line": null,
+          "commit_sha": "d43850f79a75135def77e7cd3d5d1cf017d13d7c",
+          "created_at": "2026-09-03T15:46:26Z",
+          "diff_hunk": "@@ -0,0 +1,377 @@\n+\"\"\"A claim's lifecycle: what a run may publish, what it publishes, and what withdraws it.\"\"\"\n+from __future__ import annotations\n+\n+from pydantic import BaseModel\n+\n+from app.core.ids import ID\n+from app.core.json_types import JsonScalar\n+from app.core.run_status import RunStatus\n+from app.models.claims import (\n+    DataUniverseRequirement,\n+    ClaimStatus,\n+    Dimension,\n+    DimensionDeclaration,\n+    TermMember,\n+    PublishedCitation,\n+    StageOutputCellCitation,\n+)\n+from app.models.records.claims import Claim, ClaimShape\n+from app.models.records.run_manifest import PRODUCTION_RUNS, RunManifest\n+from app.models.records.workflow_output import WorkflowOutput\n+from app.services.claim_shapes import load_claim_shapes\n+from app.services.errors import ClaimMintRefused\n+\n+_PublishedFigure = tuple[WorkflowOutput, StageOutputCellCitation]\n+\n+\n+class RelatedClaim(BaseModel):\n+    \"\"\"Another claim of the same shape. The caller diffs its context against the one it means.\"\"\"\n+\n+    claim_id: ID\n+    value: JsonScalar\n+    run_id: ID\n+    stage_id: ID\n+    row_ordinal: int\n+    made_at: str\n+    context: list[Dimension] = []\n+\n+\n+class FigureMint(BaseModel):\n+    \"\"\"One of a run's figures that names a claim shape, and whether it can be published.\"\"\"\n+\n+    slug: str\n+    label: str\n+    value: JsonScalar\n+    primary: bool\n+    stage_id: ID\n+    row_ordinal: int\n+    shape_id: ID\n+    requires: str\n+    qualifiers: list[str] = []\n+    dimensions: list[DimensionDeclaration] = []\n+    # Why this figure cannot be minted. None is the only word for \"it can\".\n+    blocked: str | None = None\n+    # This run's own claim for the figure, whatever state it is in.\n+    claim_id: ID | None = None\n+    status: str | None = None\n+    related: list[RelatedClaim] = []\n+\n+\n+class RunTally(BaseModel):\n+    claimed: int\n+    in_review: int\n+    declined: int\n+    waiting: int\n+    blocked: int\n+\n+\n+def find_run_figures(project_id: ID, run_id: ID) -> list[FigureMint]:\n+    \"\"\"Only the figures whose rule names a shape: naming none is ordinary, not an error.\"\"\"\n+    manifest = _load_manifest(project_id, run_id)\n+    shapes_by_id = {shape.id: shape for shape in load_claim_shapes(project_id)}\n+    read = _ReadOnce(\n+        refused=_find_run_refusal(manifest),\n+        window=_describe_window(manifest),\n+        claims_by_slug=_find_this_runs_claims(project_id, run_id),\n+    )\n+    return [\n+        _describe_figure(output, citation, shapes_by_id[output.shape_id], read)\n+        for output, citation in _read_run_figures(run_id)\n+        if output.shape_id is not None and output.shape_id in shapes_by_id\n+    ]\n+\n+\n+def count_run_decisions(project_id: ID, run_id: ID) -> RunTally:\n+    figures = find_run_figures(project_id, run_id)\n+    return RunTally(\n+        claimed=_count(figures, ClaimStatus.approved),\n+        in_review=_count(figures, ClaimStatus.submitted),\n+        declined=_count(figures, ClaimStatus.declined),\n+        blocked=sum(1 for figure in figures if figure.blocked and figure.status is None),\n+        waiting=sum(1 for figure in figures if _is_waiting(figure)),\n+    )\n+\n+\n+def _count(figures: list[FigureMint], status: ClaimStatus) -> int:\n+    return sum(1 for figure in figures if figure.status == status)\n+\n+\n+def submit_for_review(\n+    project_id: ID, run_id: ID, slug: str, context: list[Dimension]\n+) -> Claim:\n+    \"\"\"A claim proposed. It stands behind nothing until review approves it.\"\"\"\n+    figure = _find_figure(project_id, run_id, slug)\n+    refusals = _find_mint_refusals(figure, context)\n+    if refusals:\n+        raise ClaimMintRefused(refusals)\n+    output, citation = _find_published_figure(run_id, slug)\n+    claim = Claim(\n+        created_by_project_id=project_id,\n+        shape_id=_require_shape_id(output),\n+        slug=slug,\n+        context=context,\n+        citation=citation,\n+    )\n+    claim.save()\n+    return claim\n+\n+\n+def approve_claim(project_id: ID, claim_id: ID) -> Claim:\n+    \"\"\"Re-checks before it stands: what was in the way can move while it waits.\"\"\"\n+    claim = _load_claim(project_id, claim_id)\n+    figure = _find_figure(project_id, claim.citation.run_id, claim.slug)\n+    refusals = _find_mint_refusals(figure, claim.context)\n+    if refusals:\n+        raise ClaimMintRefused(refusals)\n+    claim.status = ClaimStatus.approved\n+    claim.save()\n+    return claim\n+\n+\n+def decline_claim(project_id: ID, claim_id: ID) -> Claim:\n+    \"\"\"Review said no. The claim stays, saying so, rather than vanishing.\"\"\"\n+    claim = _load_claim(project_id, claim_id)\n+    claim.status = ClaimStatus.declined\n+    claim.save()\n+    return claim\n+\n+\n+def decline_figure(project_id: ID, run_id: ID, slug: str) -> Claim:\n+    \"\"\"A skip: proposed and refused in one act, so the run's tally still adds up.\"\"\"\n+    figure = _find_figure(project_id, run_id, slug)\n+    if figure.claim_id is not None:\n+        return decline_claim(project_id, figure.claim_id)\n+    output, citation = _find_published_figure(run_id, slug)\n+    claim = Claim(\n+        created_by_project_id=project_id,\n+        shape_id=_require_shape_id(output),\n+        slug=slug,\n+        citation=citation,\n+        status=ClaimStatus.declined,\n+    )\n+    claim.save()\n+    return claim\n+\n+\n+\n+def _require_shape_id(output: WorkflowOutput) -> ID:\n+    if output.shape_id is None:\n+        raise ClaimMintRefused([f\"'{output.slug}' names no claim shape\"])\n+    return output.shape_id\n+\n+\n+def _load_claim(project_id: ID, claim_id: ID) -> Claim:\n+    held = Claim.load_or_none(claim_id)\n+    if held is None or held.created_by_project_id != project_id:\n+        raise ClaimMintRefused([f\"this project holds no claim '{claim_id}'\"])\n+    return held\n+\n+\n+\n+def find_declared_dimensions(\n+    project_id: ID, run_id: ID, slug: str\n+) -> list[DimensionDeclaration]:\n+    return _find_figure(project_id, run_id, slug).dimensions\n+\n+\n+def find_terms_used(project_id: ID, dimension: str) -> list[str]:\n+    \"\"\"The words already written on a term axis, so the next claim reuses one instead of a variant.\"\"\"\n+    return sorted({\n+        held.member.value\n+        for claim in Claim.find(created_by_project_id=project_id)\n+        for held in claim.context\n+        if held.name == dimension and isinstance(held.member, TermMember)\n+    })\n+\n+\n+def find_context_differences(\n+    context: list[Dimension], against: list[Dimension]\n+) -> list[Dimension]:\n+    \"\"\"What `context` holds that `against` does not. Empty means the two are one fact.\"\"\"\n+    held = {dimension.name: dimension.member for dimension in against}\n+    return [\n+        dimension for dimension in context\n+        if held.get(dimension.name) != dimension.member\n+    ]\n+\n+\n+# ─── what stands in the way ──────────────────────────────────────────────────\n+\n+\n+class _ReadOnce(BaseModel):\n+    \"\"\"The per-run facts every figure on the page shares, read once rather than per figure.\"\"\"\n+\n+    refused: str | None\n+    window: str | None\n+    claims_by_slug: dict[str, Claim]\n+\n+\n+def _find_run_refusal(manifest: RunManifest) -> str | None:\n+    if manifest.status != RunStatus.OK:\n+        return _describe_incompleteness(manifest.status)\n+    if not manifest.workflow_version:\n+        return \"This run does not record the version that produced it.\"\n+    return None\n+\n+\n+def _describe_incompleteness(status: str) -> str:\n+    if status == RunStatus.RUNNING:\n+        return \"This run has not completed.\"\n+    return f\"This run ended {status or 'unknown'}, so its figures are not the answer.\"\n+\n+\n+def _describe_window(manifest: RunManifest) -> str | None:\n+    \"\"\"What made this run read a slice of the rows rather than all of them.\"\"\"\n+    if manifest.parameters.is_test_run:\n+        return \"This was a test run, so it read a window of the rows\"\n+    capped = sorted(manifest.parameters.limits.items())\n+    if not capped:\n+        return None\n+    named = \", \".join(f\"{stage} (first {cap:,} rows)\" for stage, cap in capped)\n+    return f\"{named} read a window of its input\"\n+\n+\n+def _find_coverage_refusal(shape: ClaimShape, window: str | None) -> str | None:\n+    if window is None or shape.requires == DataUniverseRequirement.open:\n+        return None\n+    return f\"{window}, and totalling a slice turns 'is' into 'at least'.\"\n+\n+\n+def _find_mint_refusals(figure: FigureMint, context: list[Dimension]) -> list[str]:\n+    declared = {axis.name for axis in figure.dimensions}\n+    sent = {held.name for held in context}\n+    missing = sorted(declared - sent)\n+    undeclared = sorted(sent - declared)\n+    blank = sorted(\n+        held.name for held in context\n+        if isinstance(held.member, TermMember) and not held.member.value.strip()\n+    )\n+    return [\n+        *([figure.blocked] if figure.blocked else []),\n+        *([f\"this claim gives no member for {missing}\"] if missing else []),\n+        *([f\"this shape declares no dimension {undeclared}\"] if undeclared else []),\n+        *([f\"the member for {blank} was left empty\"] if blank else []),\n+        *_find_restatements(figure, context),\n+    ]\n+\n+\n+def _find_restatements(figure: FigureMint, context: list[Dimension]) -> list[str]:\n+    \"\"\"The guarantee: one shape and one context is one fact, so a second value corrects it.\"\"\"\n+    return [\n+        f\"this restates claim {claim.claim_id} — same context, and it still stands. \"\n+        f\"Supersede it, or say what is different about this one.\"\n+        for claim in figure.related\n+        if _is_one_context(claim.context, context)\n+    ]\n+\n+\n+def _is_one_context(held: list[Dimension], against: list[Dimension]) -> bool:",
+          "body": "I mean this is literally just are_dimensions_equal(dimension_1, dimension_2)",
+          "themes": [
+            "naming",
+            "needless_abstraction"
+          ],
+          "speech_act": "correction",
+          "severity": "should",
+          "rule": "Name a predicate for exactly what it compares."
+        },
+        {
+          "html_url": "https://github.com/surveit/carbonpaper/pull/973#discussion_r3926200016",
+          "pr": 973,
+          "thread_id": 3926200016,
+          "path": "app/services/claims.py",
+          "line": 281,
+          "start_line": null,
+          "commit_sha": "d43850f79a75135def77e7cd3d5d1cf017d13d7c",
+          "created_at": "2026-09-03T15:47:20Z",
+          "diff_hunk": "@@ -0,0 +1,377 @@\n+\"\"\"A claim's lifecycle: what a run may publish, what it publishes, and what withdraws it.\"\"\"\n+from __future__ import annotations\n+\n+from pydantic import BaseModel\n+\n+from app.core.ids import ID\n+from app.core.json_types import JsonScalar\n+from app.core.run_status import RunStatus\n+from app.models.claims import (\n+    DataUniverseRequirement,\n+    ClaimStatus,\n+    Dimension,\n+    DimensionDeclaration,\n+    TermMember,\n+    PublishedCitation,\n+    StageOutputCellCitation,\n+)\n+from app.models.records.claims import Claim, ClaimShape\n+from app.models.records.run_manifest import PRODUCTION_RUNS, RunManifest\n+from app.models.records.workflow_output import WorkflowOutput\n+from app.services.claim_shapes import load_claim_shapes\n+from app.services.errors import ClaimMintRefused\n+\n+_PublishedFigure = tuple[WorkflowOutput, StageOutputCellCitation]\n+\n+\n+class RelatedClaim(BaseModel):\n+    \"\"\"Another claim of the same shape. The caller diffs its context against the one it means.\"\"\"\n+\n+    claim_id: ID\n+    value: JsonScalar\n+    run_id: ID\n+    stage_id: ID\n+    row_ordinal: int\n+    made_at: str\n+    context: list[Dimension] = []\n+\n+\n+class FigureMint(BaseModel):\n+    \"\"\"One of a run's figures that names a claim shape, and whether it can be published.\"\"\"\n+\n+    slug: str\n+    label: str\n+    value: JsonScalar\n+    primary: bool\n+    stage_id: ID\n+    row_ordinal: int\n+    shape_id: ID\n+    requires: str\n+    qualifiers: list[str] = []\n+    dimensions: list[DimensionDeclaration] = []\n+    # Why this figure cannot be minted. None is the only word for \"it can\".\n+    blocked: str | None = None\n+    # This run's own claim for the figure, whatever state it is in.\n+    claim_id: ID | None = None\n+    status: str | None = None\n+    related: list[RelatedClaim] = []\n+\n+\n+class RunTally(BaseModel):\n+    claimed: int\n+    in_review: int\n+    declined: int\n+    waiting: int\n+    blocked: int\n+\n+\n+def find_run_figures(project_id: ID, run_id: ID) -> list[FigureMint]:\n+    \"\"\"Only the figures whose rule names a shape: naming none is ordinary, not an error.\"\"\"\n+    manifest = _load_manifest(project_id, run_id)\n+    shapes_by_id = {shape.id: shape for shape in load_claim_shapes(project_id)}\n+    read = _ReadOnce(\n+        refused=_find_run_refusal(manifest),\n+        window=_describe_window(manifest),\n+        claims_by_slug=_find_this_runs_claims(project_id, run_id),\n+    )\n+    return [\n+        _describe_figure(output, citation, shapes_by_id[output.shape_id], read)\n+        for output, citation in _read_run_figures(run_id)\n+        if output.shape_id is not None and output.shape_id in shapes_by_id\n+    ]\n+\n+\n+def count_run_decisions(project_id: ID, run_id: ID) -> RunTally:\n+    figures = find_run_figures(project_id, run_id)\n+    return RunTally(\n+        claimed=_count(figures, ClaimStatus.approved),\n+        in_review=_count(figures, ClaimStatus.submitted),\n+        declined=_count(figures, ClaimStatus.declined),\n+        blocked=sum(1 for figure in figures if figure.blocked and figure.status is None),\n+        waiting=sum(1 for figure in figures if _is_waiting(figure)),\n+    )\n+\n+\n+def _count(figures: list[FigureMint], status: ClaimStatus) -> int:\n+    return sum(1 for figure in figures if figure.status == status)\n+\n+\n+def submit_for_review(\n+    project_id: ID, run_id: ID, slug: str, context: list[Dimension]\n+) -> Claim:\n+    \"\"\"A claim proposed. It stands behind nothing until review approves it.\"\"\"\n+    figure = _find_figure(project_id, run_id, slug)\n+    refusals = _find_mint_refusals(figure, context)\n+    if refusals:\n+        raise ClaimMintRefused(refusals)\n+    output, citation = _find_published_figure(run_id, slug)\n+    claim = Claim(\n+        created_by_project_id=project_id,\n+        shape_id=_require_shape_id(output),\n+        slug=slug,\n+        context=context,\n+        citation=citation,\n+    )\n+    claim.save()\n+    return claim\n+\n+\n+def approve_claim(project_id: ID, claim_id: ID) -> Claim:\n+    \"\"\"Re-checks before it stands: what was in the way can move while it waits.\"\"\"\n+    claim = _load_claim(project_id, claim_id)\n+    figure = _find_figure(project_id, claim.citation.run_id, claim.slug)\n+    refusals = _find_mint_refusals(figure, claim.context)\n+    if refusals:\n+        raise ClaimMintRefused(refusals)\n+    claim.status = ClaimStatus.approved\n+    claim.save()\n+    return claim\n+\n+\n+def decline_claim(project_id: ID, claim_id: ID) -> Claim:\n+    \"\"\"Review said no. The claim stays, saying so, rather than vanishing.\"\"\"\n+    claim = _load_claim(project_id, claim_id)\n+    claim.status = ClaimStatus.declined\n+    claim.save()\n+    return claim\n+\n+\n+def decline_figure(project_id: ID, run_id: ID, slug: str) -> Claim:\n+    \"\"\"A skip: proposed and refused in one act, so the run's tally still adds up.\"\"\"\n+    figure = _find_figure(project_id, run_id, slug)\n+    if figure.claim_id is not None:\n+        return decline_claim(project_id, figure.claim_id)\n+    output, citation = _find_published_figure(run_id, slug)\n+    claim = Claim(\n+        created_by_project_id=project_id,\n+        shape_id=_require_shape_id(output),\n+        slug=slug,\n+        citation=citation,\n+        status=ClaimStatus.declined,\n+    )\n+    claim.save()\n+    return claim\n+\n+\n+\n+def _require_shape_id(output: WorkflowOutput) -> ID:\n+    if output.shape_id is None:\n+        raise ClaimMintRefused([f\"'{output.slug}' names no claim shape\"])\n+    return output.shape_id\n+\n+\n+def _load_claim(project_id: ID, claim_id: ID) -> Claim:\n+    held = Claim.load_or_none(claim_id)\n+    if held is None or held.created_by_project_id != project_id:\n+        raise ClaimMintRefused([f\"this project holds no claim '{claim_id}'\"])\n+    return held\n+\n+\n+\n+def find_declared_dimensions(\n+    project_id: ID, run_id: ID, slug: str\n+) -> list[DimensionDeclaration]:\n+    return _find_figure(project_id, run_id, slug).dimensions\n+\n+\n+def find_terms_used(project_id: ID, dimension: str) -> list[str]:\n+    \"\"\"The words already written on a term axis, so the next claim reuses one instead of a variant.\"\"\"\n+    return sorted({\n+        held.member.value\n+        for claim in Claim.find(created_by_project_id=project_id)\n+        for held in claim.context\n+        if held.name == dimension and isinstance(held.member, TermMember)\n+    })\n+\n+\n+def find_context_differences(\n+    context: list[Dimension], against: list[Dimension]\n+) -> list[Dimension]:\n+    \"\"\"What `context` holds that `against` does not. Empty means the two are one fact.\"\"\"\n+    held = {dimension.name: dimension.member for dimension in against}\n+    return [\n+        dimension for dimension in context\n+        if held.get(dimension.name) != dimension.member\n+    ]\n+\n+\n+# ─── what stands in the way ──────────────────────────────────────────────────\n+\n+\n+class _ReadOnce(BaseModel):\n+    \"\"\"The per-run facts every figure on the page shares, read once rather than per figure.\"\"\"\n+\n+    refused: str | None\n+    window: str | None\n+    claims_by_slug: dict[str, Claim]\n+\n+\n+def _find_run_refusal(manifest: RunManifest) -> str | None:\n+    if manifest.status != RunStatus.OK:\n+        return _describe_incompleteness(manifest.status)\n+    if not manifest.workflow_version:\n+        return \"This run does not record the version that produced it.\"\n+    return None\n+\n+\n+def _describe_incompleteness(status: str) -> str:\n+    if status == RunStatus.RUNNING:\n+        return \"This run has not completed.\"\n+    return f\"This run ended {status or 'unknown'}, so its figures are not the answer.\"\n+\n+\n+def _describe_window(manifest: RunManifest) -> str | None:\n+    \"\"\"What made this run read a slice of the rows rather than all of them.\"\"\"\n+    if manifest.parameters.is_test_run:\n+        return \"This was a test run, so it read a window of the rows\"\n+    capped = sorted(manifest.parameters.limits.items())\n+    if not capped:\n+        return None\n+    named = \", \".join(f\"{stage} (first {cap:,} rows)\" for stage, cap in capped)\n+    return f\"{named} read a window of its input\"\n+\n+\n+def _find_coverage_refusal(shape: ClaimShape, window: str | None) -> str | None:\n+    if window is None or shape.requires == DataUniverseRequirement.open:\n+        return None\n+    return f\"{window}, and totalling a slice turns 'is' into 'at least'.\"\n+\n+\n+def _find_mint_refusals(figure: FigureMint, context: list[Dimension]) -> list[str]:\n+    declared = {axis.name for axis in figure.dimensions}\n+    sent = {held.name for held in context}\n+    missing = sorted(declared - sent)\n+    undeclared = sorted(sent - declared)\n+    blank = sorted(\n+        held.name for held in context\n+        if isinstance(held.member, TermMember) and not held.member.value.strip()\n+    )\n+    return [\n+        *([figure.blocked] if figure.blocked else []),\n+        *([f\"this claim gives no member for {missing}\"] if missing else []),\n+        *([f\"this shape declares no dimension {undeclared}\"] if undeclared else []),\n+        *([f\"the member for {blank} was left empty\"] if blank else []),\n+        *_find_restatements(figure, context),\n+    ]\n+\n+\n+def _find_restatements(figure: FigureMint, context: list[Dimension]) -> list[str]:\n+    \"\"\"The guarantee: one shape and one context is one fact, so a second value corrects it.\"\"\"\n+    return [\n+        f\"this restates claim {claim.claim_id} — same context, and it still stands. \"\n+        f\"Supersede it, or say what is different about this one.\"\n+        for claim in figure.related\n+        if _is_one_context(claim.context, context)\n+    ]\n+\n+\n+def _is_one_context(held: list[Dimension], against: list[Dimension]) -> bool:\n+    return not find_context_differences(held, against) and not find_context_differences(\n+        against, held\n+    )\n+\n+\n+def _is_waiting(figure: FigureMint) -> bool:\n+    return figure.status is None and figure.blocked is None\n+\n+\n+# ─── reading and writing ─────────────────────────────────────────────────────\n+\n+\n+def _describe_figure(",
+          "body": "this doesn't describe anything. It makes an object. If not for the fact that I reject FigureMint as an object, it's build_figure_mint",
+          "themes": [
+            "naming"
+          ],
+          "speech_act": "correction",
+          "severity": "should",
+          "rule": "A function's verb must match its action: builders are build_."
+        },
+        {
+          "html_url": "https://github.com/surveit/carbonpaper/pull/973#discussion_r3926208015",
+          "pr": 973,
+          "thread_id": 3926208015,
+          "path": "app/services/claims.py",
+          "line": 318,
+          "start_line": null,
+          "commit_sha": "d43850f79a75135def77e7cd3d5d1cf017d13d7c",
+          "created_at": "2026-09-03T15:48:13Z",
+          "diff_hunk": "@@ -0,0 +1,377 @@\n+\"\"\"A claim's lifecycle: what a run may publish, what it publishes, and what withdraws it.\"\"\"\n+from __future__ import annotations\n+\n+from pydantic import BaseModel\n+\n+from app.core.ids import ID\n+from app.core.json_types import JsonScalar\n+from app.core.run_status import RunStatus\n+from app.models.claims import (\n+    DataUniverseRequirement,\n+    ClaimStatus,\n+    Dimension,\n+    DimensionDeclaration,\n+    TermMember,\n+    PublishedCitation,\n+    StageOutputCellCitation,\n+)\n+from app.models.records.claims import Claim, ClaimShape\n+from app.models.records.run_manifest import PRODUCTION_RUNS, RunManifest\n+from app.models.records.workflow_output import WorkflowOutput\n+from app.services.claim_shapes import load_claim_shapes\n+from app.services.errors import ClaimMintRefused\n+\n+_PublishedFigure = tuple[WorkflowOutput, StageOutputCellCitation]\n+\n+\n+class RelatedClaim(BaseModel):\n+    \"\"\"Another claim of the same shape. The caller diffs its context against the one it means.\"\"\"\n+\n+    claim_id: ID\n+    value: JsonScalar\n+    run_id: ID\n+    stage_id: ID\n+    row_ordinal: int\n+    made_at: str\n+    context: list[Dimension] = []\n+\n+\n+class FigureMint(BaseModel):\n+    \"\"\"One of a run's figures that names a claim shape, and whether it can be published.\"\"\"\n+\n+    slug: str\n+    label: str\n+    value: JsonScalar\n+    primary: bool\n+    stage_id: ID\n+    row_ordinal: int\n+    shape_id: ID\n+    requires: str\n+    qualifiers: list[str] = []\n+    dimensions: list[DimensionDeclaration] = []\n+    # Why this figure cannot be minted. None is the only word for \"it can\".\n+    blocked: str | None = None\n+    # This run's own claim for the figure, whatever state it is in.\n+    claim_id: ID | None = None\n+    status: str | None = None\n+    related: list[RelatedClaim] = []\n+\n+\n+class RunTally(BaseModel):\n+    claimed: int\n+    in_review: int\n+    declined: int\n+    waiting: int\n+    blocked: int\n+\n+\n+def find_run_figures(project_id: ID, run_id: ID) -> list[FigureMint]:\n+    \"\"\"Only the figures whose rule names a shape: naming none is ordinary, not an error.\"\"\"\n+    manifest = _load_manifest(project_id, run_id)\n+    shapes_by_id = {shape.id: shape for shape in load_claim_shapes(project_id)}\n+    read = _ReadOnce(\n+        refused=_find_run_refusal(manifest),\n+        window=_describe_window(manifest),\n+        claims_by_slug=_find_this_runs_claims(project_id, run_id),\n+    )\n+    return [\n+        _describe_figure(output, citation, shapes_by_id[output.shape_id], read)\n+        for output, citation in _read_run_figures(run_id)\n+        if output.shape_id is not None and output.shape_id in shapes_by_id\n+    ]\n+\n+\n+def count_run_decisions(project_id: ID, run_id: ID) -> RunTally:\n+    figures = find_run_figures(project_id, run_id)\n+    return RunTally(\n+        claimed=_count(figures, ClaimStatus.approved),\n+        in_review=_count(figures, ClaimStatus.submitted),\n+        declined=_count(figures, ClaimStatus.declined),\n+        blocked=sum(1 for figure in figures if figure.blocked and figure.status is None),\n+        waiting=sum(1 for figure in figures if _is_waiting(figure)),\n+    )\n+\n+\n+def _count(figures: list[FigureMint], status: ClaimStatus) -> int:\n+    return sum(1 for figure in figures if figure.status == status)\n+\n+\n+def submit_for_review(\n+    project_id: ID, run_id: ID, slug: str, context: list[Dimension]\n+) -> Claim:\n+    \"\"\"A claim proposed. It stands behind nothing until review approves it.\"\"\"\n+    figure = _find_figure(project_id, run_id, slug)\n+    refusals = _find_mint_refusals(figure, context)\n+    if refusals:\n+        raise ClaimMintRefused(refusals)\n+    output, citation = _find_published_figure(run_id, slug)\n+    claim = Claim(\n+        created_by_project_id=project_id,\n+        shape_id=_require_shape_id(output),\n+        slug=slug,\n+        context=context,\n+        citation=citation,\n+    )\n+    claim.save()\n+    return claim\n+\n+\n+def approve_claim(project_id: ID, claim_id: ID) -> Claim:\n+    \"\"\"Re-checks before it stands: what was in the way can move while it waits.\"\"\"\n+    claim = _load_claim(project_id, claim_id)\n+    figure = _find_figure(project_id, claim.citation.run_id, claim.slug)\n+    refusals = _find_mint_refusals(figure, claim.context)\n+    if refusals:\n+        raise ClaimMintRefused(refusals)\n+    claim.status = ClaimStatus.approved\n+    claim.save()\n+    return claim\n+\n+\n+def decline_claim(project_id: ID, claim_id: ID) -> Claim:\n+    \"\"\"Review said no. The claim stays, saying so, rather than vanishing.\"\"\"\n+    claim = _load_claim(project_id, claim_id)\n+    claim.status = ClaimStatus.declined\n+    claim.save()\n+    return claim\n+\n+\n+def decline_figure(project_id: ID, run_id: ID, slug: str) -> Claim:\n+    \"\"\"A skip: proposed and refused in one act, so the run's tally still adds up.\"\"\"\n+    figure = _find_figure(project_id, run_id, slug)\n+    if figure.claim_id is not None:\n+        return decline_claim(project_id, figure.claim_id)\n+    output, citation = _find_published_figure(run_id, slug)\n+    claim = Claim(\n+        created_by_project_id=project_id,\n+        shape_id=_require_shape_id(output),\n+        slug=slug,\n+        citation=citation,\n+        status=ClaimStatus.declined,\n+    )\n+    claim.save()\n+    return claim\n+\n+\n+\n+def _require_shape_id(output: WorkflowOutput) -> ID:\n+    if output.shape_id is None:\n+        raise ClaimMintRefused([f\"'{output.slug}' names no claim shape\"])\n+    return output.shape_id\n+\n+\n+def _load_claim(project_id: ID, claim_id: ID) -> Claim:\n+    held = Claim.load_or_none(claim_id)\n+    if held is None or held.created_by_project_id != project_id:\n+        raise ClaimMintRefused([f\"this project holds no claim '{claim_id}'\"])\n+    return held\n+\n+\n+\n+def find_declared_dimensions(\n+    project_id: ID, run_id: ID, slug: str\n+) -> list[DimensionDeclaration]:\n+    return _find_figure(project_id, run_id, slug).dimensions\n+\n+\n+def find_terms_used(project_id: ID, dimension: str) -> list[str]:\n+    \"\"\"The words already written on a term axis, so the next claim reuses one instead of a variant.\"\"\"\n+    return sorted({\n+        held.member.value\n+        for claim in Claim.find(created_by_project_id=project_id)\n+        for held in claim.context\n+        if held.name == dimension and isinstance(held.member, TermMember)\n+    })\n+\n+\n+def find_context_differences(\n+    context: list[Dimension], against: list[Dimension]\n+) -> list[Dimension]:\n+    \"\"\"What `context` holds that `against` does not. Empty means the two are one fact.\"\"\"\n+    held = {dimension.name: dimension.member for dimension in against}\n+    return [\n+        dimension for dimension in context\n+        if held.get(dimension.name) != dimension.member\n+    ]\n+\n+\n+# ─── what stands in the way ──────────────────────────────────────────────────\n+\n+\n+class _ReadOnce(BaseModel):\n+    \"\"\"The per-run facts every figure on the page shares, read once rather than per figure.\"\"\"\n+\n+    refused: str | None\n+    window: str | None\n+    claims_by_slug: dict[str, Claim]\n+\n+\n+def _find_run_refusal(manifest: RunManifest) -> str | None:\n+    if manifest.status != RunStatus.OK:\n+        return _describe_incompleteness(manifest.status)\n+    if not manifest.workflow_version:\n+        return \"This run does not record the version that produced it.\"\n+    return None\n+\n+\n+def _describe_incompleteness(status: str) -> str:\n+    if status == RunStatus.RUNNING:\n+        return \"This run has not completed.\"\n+    return f\"This run ended {status or 'unknown'}, so its figures are not the answer.\"\n+\n+\n+def _describe_window(manifest: RunManifest) -> str | None:\n+    \"\"\"What made this run read a slice of the rows rather than all of them.\"\"\"\n+    if manifest.parameters.is_test_run:\n+        return \"This was a test run, so it read a window of the rows\"\n+    capped = sorted(manifest.parameters.limits.items())\n+    if not capped:\n+        return None\n+    named = \", \".join(f\"{stage} (first {cap:,} rows)\" for stage, cap in capped)\n+    return f\"{named} read a window of its input\"\n+\n+\n+def _find_coverage_refusal(shape: ClaimShape, window: str | None) -> str | None:\n+    if window is None or shape.requires == DataUniverseRequirement.open:\n+        return None\n+    return f\"{window}, and totalling a slice turns 'is' into 'at least'.\"\n+\n+\n+def _find_mint_refusals(figure: FigureMint, context: list[Dimension]) -> list[str]:\n+    declared = {axis.name for axis in figure.dimensions}\n+    sent = {held.name for held in context}\n+    missing = sorted(declared - sent)\n+    undeclared = sorted(sent - declared)\n+    blank = sorted(\n+        held.name for held in context\n+        if isinstance(held.member, TermMember) and not held.member.value.strip()\n+    )\n+    return [\n+        *([figure.blocked] if figure.blocked else []),\n+        *([f\"this claim gives no member for {missing}\"] if missing else []),\n+        *([f\"this shape declares no dimension {undeclared}\"] if undeclared else []),\n+        *([f\"the member for {blank} was left empty\"] if blank else []),\n+        *_find_restatements(figure, context),\n+    ]\n+\n+\n+def _find_restatements(figure: FigureMint, context: list[Dimension]) -> list[str]:\n+    \"\"\"The guarantee: one shape and one context is one fact, so a second value corrects it.\"\"\"\n+    return [\n+        f\"this restates claim {claim.claim_id} — same context, and it still stands. \"\n+        f\"Supersede it, or say what is different about this one.\"\n+        for claim in figure.related\n+        if _is_one_context(claim.context, context)\n+    ]\n+\n+\n+def _is_one_context(held: list[Dimension], against: list[Dimension]) -> bool:\n+    return not find_context_differences(held, against) and not find_context_differences(\n+        against, held\n+    )\n+\n+\n+def _is_waiting(figure: FigureMint) -> bool:\n+    return figure.status is None and figure.blocked is None\n+\n+\n+# ─── reading and writing ─────────────────────────────────────────────────────\n+\n+\n+def _describe_figure(\n+    output: WorkflowOutput,\n+    citation: StageOutputCellCitation,\n+    shape: ClaimShape,\n+    read: _ReadOnce,\n+) -> FigureMint:\n+    related = _find_related_claims(shape)\n+    held = read.claims_by_slug.get(output.slug)\n+    return FigureMint(\n+        slug=output.slug,\n+        label=shape.label,\n+        value=citation.value,\n+        primary=output.primary,\n+        stage_id=citation.stage_id,\n+        row_ordinal=citation.row_ordinal,\n+        shape_id=shape.id,\n+        requires=shape.requires,\n+        qualifiers=shape.qualifiers,\n+        dimensions=shape.dimensions,\n+        blocked=read.refused or _find_coverage_refusal(shape, read.window),\n+        claim_id=held.id if held else None,\n+        status=held.status if held else None,\n+        related=[claim for claim in related if claim.run_id != citation.run_id],\n+    )\n+\n+\n+\n+def _find_related_claims(shape: ClaimShape) -> list[RelatedClaim]:\n+    \"\"\"Every claim of this shape that stands or awaits review, oldest first.\"\"\"\n+    claims = Claim.find(created_by_project_id=shape.project_id, shape_id=shape.id)\n+    return [\n+        _describe_related(claim)\n+        for claim in sorted(claims, key=lambda held: held.created_at)\n+        if claim.status != ClaimStatus.declined\n+    ]\n+\n+\n+def _describe_related(claim: Claim) -> RelatedClaim:",
+          "body": "Let web decide how to describe the relation. Keep this shit out of services, it's not lifecycle ",
+          "themes": [
+            "code_placement"
+          ],
+          "speech_act": "correction",
+          "severity": "blocking",
+          "rule": "Services own lifecycle; describing relations belongs in web."
+        },
+        {
+          "html_url": "https://github.com/surveit/carbonpaper/pull/973#discussion_r3926933040",
+          "pr": 973,
+          "thread_id": 3926933040,
+          "path": "app/models/records/claims.py",
+          "line": 51,
+          "start_line": null,
+          "commit_sha": "52fd29629b876c1a1c233d4d732a855f94032a72",
+          "created_at": "2026-09-03T17:17:59Z",
+          "diff_hunk": "@@ -40,11 +45,30 @@ class Claim(PersistedModel):\n     # Frozen: what a reader saw and what is stored can never disagree.\n     created_by_project_id: ID = Field(frozen=True)\n     shape_id: ID = Field(frozen=True)\n+    # One value per column the shape declares; matching contexts are one fact.\n+    context: JsonDict = Field(default={}, frozen=True)\n+    # What a person wrote for an article. Movable while submitted; fixed once it stands.\n+    text: str = \"\"",
+          "body": "actually probably frozen also. if we want adversarial review to attack it, we don't want it to change underneath us. You just need to mint a new Claim if you edit it. That's fine",
+          "themes": [
+            "design_direction",
+            "data_model"
+          ],
+          "speech_act": "instruction",
+          "severity": "should",
+          "rule": "Reviewed text is frozen; an edit makes a new record."
+        },
+        {
+          "html_url": "https://github.com/surveit/carbonpaper/pull/973#discussion_r3926934980",
+          "pr": 973,
+          "thread_id": 3926934980,
+          "path": "app/services/claims.py",
+          "line": 121,
+          "start_line": null,
+          "commit_sha": "52fd29629b876c1a1c233d4d732a855f94032a72",
+          "created_at": "2026-09-03T17:18:15Z",
+          "diff_hunk": "@@ -0,0 +1,174 @@\n+\"\"\"A claim's lifecycle: proposing one, and the checks that decide whether it may stand.\"\"\"\n+from __future__ import annotations\n+\n+from pydantic import ValidationError\n+\n+from app.core.ids import ID\n+from app.core.json_types import JsonDict\n+from app.models.claims import ClaimStatus, DataUniverseRequirement\n+from app.models.records.claims import Claim, ClaimShape\n+from app.models.records.workflow_output import WorkflowOutput\n+from app.models.schema import TableSchema\n+from app.services.claim_shapes import load_claim_shape\n+from app.services.errors import ClaimRefused\n+\n+\n+def submit_claim(\n+    project_id: ID, run_id: ID, slug: str, context: JsonDict, text: str\n+) -> Claim:\n+    \"\"\"Proposed, not made: it stands behind nothing until review approves it.\"\"\"\n+    output = read_claimable_output(run_id, slug)\n+    shape = _require_shape(project_id, output.shape_id)\n+    held = read_context(shape, context)\n+    validate_nothing_equivalent_stands(project_id, shape, held)\n+    claim = Claim(\n+        created_by_project_id=project_id, shape_id=shape.id,\n+        context=held, citation=output.citation, text=_require_text(text),\n+    )\n+    claim.save()\n+    return claim\n+\n+\n+def rewrite_claim(project_id: ID, claim_id: ID, text: str) -> Claim:\n+    \"\"\"The words are the deliverable, and review has notes on them.\"\"\"\n+    claim = load_claim(project_id, claim_id)\n+    if claim.status != ClaimStatus.submitted:\n+        raise ClaimRefused([f\"claim {claim_id} is {claim.status} — its words are fixed\"])\n+    claim.text = _require_text(text)\n+    claim.save()\n+    return claim\n+\n+\n+def approve_claim(project_id: ID, claim_id: ID, run_read_everything: bool) -> Claim:\n+    \"\"\"Re-checked before it stands: what was in the way can move while it waits.\"\"\"\n+    claim = load_claim(project_id, claim_id)\n+    shape = _require_shape(project_id, claim.shape_id)\n+    validate_run_covers_the_shape(shape, run_read_everything)\n+    validate_nothing_equivalent_stands(project_id, shape, claim.context, besides_claim_id=claim.id)\n+    return _set_status(claim, ClaimStatus.approved)\n+\n+\n+def decline_claim(project_id: ID, claim_id: ID) -> Claim:\n+    \"\"\"The claim stays, saying so: a figure refused reads differently from one never opened.\"\"\"\n+    return _set_status(load_claim(project_id, claim_id), ClaimStatus.declined)\n+\n+\n+def decline_output(project_id: ID, run_id: ID, slug: str) -> Claim:\n+    \"\"\"A skip: proposed and refused in one act, so the run's counts still add up.\"\"\"\n+    output = read_claimable_output(run_id, slug)\n+    shape = _require_shape(project_id, output.shape_id)\n+    claim = Claim(\n+        created_by_project_id=project_id, shape_id=shape.id,\n+        citation=output.citation, status=ClaimStatus.declined,\n+    )\n+    claim.save()\n+    return claim\n+\n+\n+# ─── reading ──────────────────────────────────────────────────────────────────\n+\n+\n+def load_claim(project_id: ID, claim_id: ID) -> Claim:\n+    held = Claim.load_or_none(claim_id)\n+    if held is None or held.created_by_project_id != project_id:\n+        raise ClaimRefused([f\"this project holds no claim '{claim_id}'\"])\n+    return held\n+\n+\n+def load_claims_of_shape(project_id: ID, shape_id: ID) -> list[Claim]:\n+    \"\"\"Standing or awaiting review, oldest first. A declined claim is nobody's history.\"\"\"\n+    claims = Claim.find(created_by_project_id=project_id, shape_id=shape_id)\n+    return sorted(\n+        (claim for claim in claims if claim.status != ClaimStatus.declined),\n+        key=lambda claim: claim.created_at,\n+    )\n+\n+\n+def load_run_claims(project_id: ID, run_id: ID) -> dict[str, Claim]:\n+    \"\"\"This run's own claim per shape. The citation carries the run; find() cannot select on it.\"\"\"\n+    return {\n+        claim.shape_id: claim\n+        for claim in Claim.find(created_by_project_id=project_id)\n+        if claim.citation.run_id == run_id\n+    }\n+\n+\n+def read_claimable_outputs(run_id: ID) -> list[WorkflowOutput]:\n+    \"\"\"The run's outputs that name a shape. Naming none is ordinary, and claims nothing.\"\"\"\n+    return [\n+        output for output in WorkflowOutput.list()\n+        if output.shape_id is not None and output.citation.run_id == run_id\n+    ]\n+\n+\n+def read_claimable_output(run_id: ID, slug: str) -> WorkflowOutput:\n+    for output in read_claimable_outputs(run_id):\n+        if output.slug == slug:\n+            return output\n+    raise ClaimRefused([f\"run '{run_id}' published no claimable output '{slug}'\"])\n+\n+\n+def find_equivalent_claims(\n+    project_id: ID, shape_id: ID, context: JsonDict, besides_claim_id: ID = \"\"\n+) -> list[Claim]:\n+    \"\"\"Same shape, same context: the same fact, so two of them cannot both be right.\"\"\"\n+    return [\n+        claim for claim in load_claims_of_shape(project_id, shape_id)\n+        if claim.id != besides_claim_id and are_contexts_equal(claim.context, context)\n+    ]\n+\n+\n+def are_contexts_equal(one: JsonDict, other: JsonDict) -> bool:",
+          "body": "umm... kill this",
+          "themes": [
+            "needless_abstraction"
+          ],
+          "speech_act": "instruction",
+          "severity": "should",
+          "rule": "Don't wrap a plain equality in a named function."
+        },
+        {
+          "html_url": "https://github.com/surveit/carbonpaper/pull/973#discussion_r3926938491",
+          "pr": 973,
+          "thread_id": 3926938491,
+          "path": "app/services/claims.py",
+          "line": 104,
+          "start_line": null,
+          "commit_sha": "52fd29629b876c1a1c233d4d732a855f94032a72",
+          "created_at": "2026-09-03T17:18:43Z",
+          "diff_hunk": "@@ -0,0 +1,174 @@\n+\"\"\"A claim's lifecycle: proposing one, and the checks that decide whether it may stand.\"\"\"\n+from __future__ import annotations\n+\n+from pydantic import ValidationError\n+\n+from app.core.ids import ID\n+from app.core.json_types import JsonDict\n+from app.models.claims import ClaimStatus, DataUniverseRequirement\n+from app.models.records.claims import Claim, ClaimShape\n+from app.models.records.workflow_output import WorkflowOutput\n+from app.models.schema import TableSchema\n+from app.services.claim_shapes import load_claim_shape\n+from app.services.errors import ClaimRefused\n+\n+\n+def submit_claim(\n+    project_id: ID, run_id: ID, slug: str, context: JsonDict, text: str\n+) -> Claim:\n+    \"\"\"Proposed, not made: it stands behind nothing until review approves it.\"\"\"\n+    output = read_claimable_output(run_id, slug)\n+    shape = _require_shape(project_id, output.shape_id)\n+    held = read_context(shape, context)\n+    validate_nothing_equivalent_stands(project_id, shape, held)\n+    claim = Claim(\n+        created_by_project_id=project_id, shape_id=shape.id,\n+        context=held, citation=output.citation, text=_require_text(text),\n+    )\n+    claim.save()\n+    return claim\n+\n+\n+def rewrite_claim(project_id: ID, claim_id: ID, text: str) -> Claim:\n+    \"\"\"The words are the deliverable, and review has notes on them.\"\"\"\n+    claim = load_claim(project_id, claim_id)\n+    if claim.status != ClaimStatus.submitted:\n+        raise ClaimRefused([f\"claim {claim_id} is {claim.status} — its words are fixed\"])\n+    claim.text = _require_text(text)\n+    claim.save()\n+    return claim\n+\n+\n+def approve_claim(project_id: ID, claim_id: ID, run_read_everything: bool) -> Claim:\n+    \"\"\"Re-checked before it stands: what was in the way can move while it waits.\"\"\"\n+    claim = load_claim(project_id, claim_id)\n+    shape = _require_shape(project_id, claim.shape_id)\n+    validate_run_covers_the_shape(shape, run_read_everything)\n+    validate_nothing_equivalent_stands(project_id, shape, claim.context, besides_claim_id=claim.id)\n+    return _set_status(claim, ClaimStatus.approved)\n+\n+\n+def decline_claim(project_id: ID, claim_id: ID) -> Claim:\n+    \"\"\"The claim stays, saying so: a figure refused reads differently from one never opened.\"\"\"\n+    return _set_status(load_claim(project_id, claim_id), ClaimStatus.declined)\n+\n+\n+def decline_output(project_id: ID, run_id: ID, slug: str) -> Claim:\n+    \"\"\"A skip: proposed and refused in one act, so the run's counts still add up.\"\"\"\n+    output = read_claimable_output(run_id, slug)\n+    shape = _require_shape(project_id, output.shape_id)\n+    claim = Claim(\n+        created_by_project_id=project_id, shape_id=shape.id,\n+        citation=output.citation, status=ClaimStatus.declined,\n+    )\n+    claim.save()\n+    return claim\n+\n+\n+# ─── reading ──────────────────────────────────────────────────────────────────\n+\n+\n+def load_claim(project_id: ID, claim_id: ID) -> Claim:\n+    held = Claim.load_or_none(claim_id)\n+    if held is None or held.created_by_project_id != project_id:\n+        raise ClaimRefused([f\"this project holds no claim '{claim_id}'\"])\n+    return held\n+\n+\n+def load_claims_of_shape(project_id: ID, shape_id: ID) -> list[Claim]:\n+    \"\"\"Standing or awaiting review, oldest first. A declined claim is nobody's history.\"\"\"\n+    claims = Claim.find(created_by_project_id=project_id, shape_id=shape_id)\n+    return sorted(\n+        (claim for claim in claims if claim.status != ClaimStatus.declined),\n+        key=lambda claim: claim.created_at,\n+    )\n+\n+\n+def load_run_claims(project_id: ID, run_id: ID) -> dict[str, Claim]:\n+    \"\"\"This run's own claim per shape. The citation carries the run; find() cannot select on it.\"\"\"\n+    return {\n+        claim.shape_id: claim\n+        for claim in Claim.find(created_by_project_id=project_id)\n+        if claim.citation.run_id == run_id\n+    }\n+\n+\n+def read_claimable_outputs(run_id: ID) -> list[WorkflowOutput]:\n+    \"\"\"The run's outputs that name a shape. Naming none is ordinary, and claims nothing.\"\"\"\n+    return [\n+        output for output in WorkflowOutput.list()\n+        if output.shape_id is not None and output.citation.run_id == run_id\n+    ]\n+\n+\n+def read_claimable_output(run_id: ID, slug: str) -> WorkflowOutput:",
+          "body": "isn't this read_workflow_run_output_by_slug?",
+          "themes": [
+            "naming"
+          ],
+          "speech_act": "correction",
+          "severity": "should",
+          "rule": "Name a reader after the record it returns, not new jargon."
+        },
+        {
+          "html_url": "https://github.com/surveit/carbonpaper/pull/973#discussion_r3926940473",
+          "pr": 973,
+          "thread_id": 3926940473,
+          "path": "app/services/claims.py",
+          "line": 96,
+          "start_line": null,
+          "commit_sha": "52fd29629b876c1a1c233d4d732a855f94032a72",
+          "created_at": "2026-09-03T17:18:59Z",
+          "diff_hunk": "@@ -0,0 +1,174 @@\n+\"\"\"A claim's lifecycle: proposing one, and the checks that decide whether it may stand.\"\"\"\n+from __future__ import annotations\n+\n+from pydantic import ValidationError\n+\n+from app.core.ids import ID\n+from app.core.json_types import JsonDict\n+from app.models.claims import ClaimStatus, DataUniverseRequirement\n+from app.models.records.claims import Claim, ClaimShape\n+from app.models.records.workflow_output import WorkflowOutput\n+from app.models.schema import TableSchema\n+from app.services.claim_shapes import load_claim_shape\n+from app.services.errors import ClaimRefused\n+\n+\n+def submit_claim(\n+    project_id: ID, run_id: ID, slug: str, context: JsonDict, text: str\n+) -> Claim:\n+    \"\"\"Proposed, not made: it stands behind nothing until review approves it.\"\"\"\n+    output = read_claimable_output(run_id, slug)\n+    shape = _require_shape(project_id, output.shape_id)\n+    held = read_context(shape, context)\n+    validate_nothing_equivalent_stands(project_id, shape, held)\n+    claim = Claim(\n+        created_by_project_id=project_id, shape_id=shape.id,\n+        context=held, citation=output.citation, text=_require_text(text),\n+    )\n+    claim.save()\n+    return claim\n+\n+\n+def rewrite_claim(project_id: ID, claim_id: ID, text: str) -> Claim:\n+    \"\"\"The words are the deliverable, and review has notes on them.\"\"\"\n+    claim = load_claim(project_id, claim_id)\n+    if claim.status != ClaimStatus.submitted:\n+        raise ClaimRefused([f\"claim {claim_id} is {claim.status} — its words are fixed\"])\n+    claim.text = _require_text(text)\n+    claim.save()\n+    return claim\n+\n+\n+def approve_claim(project_id: ID, claim_id: ID, run_read_everything: bool) -> Claim:\n+    \"\"\"Re-checked before it stands: what was in the way can move while it waits.\"\"\"\n+    claim = load_claim(project_id, claim_id)\n+    shape = _require_shape(project_id, claim.shape_id)\n+    validate_run_covers_the_shape(shape, run_read_everything)\n+    validate_nothing_equivalent_stands(project_id, shape, claim.context, besides_claim_id=claim.id)\n+    return _set_status(claim, ClaimStatus.approved)\n+\n+\n+def decline_claim(project_id: ID, claim_id: ID) -> Claim:\n+    \"\"\"The claim stays, saying so: a figure refused reads differently from one never opened.\"\"\"\n+    return _set_status(load_claim(project_id, claim_id), ClaimStatus.declined)\n+\n+\n+def decline_output(project_id: ID, run_id: ID, slug: str) -> Claim:\n+    \"\"\"A skip: proposed and refused in one act, so the run's counts still add up.\"\"\"\n+    output = read_claimable_output(run_id, slug)\n+    shape = _require_shape(project_id, output.shape_id)\n+    claim = Claim(\n+        created_by_project_id=project_id, shape_id=shape.id,\n+        citation=output.citation, status=ClaimStatus.declined,\n+    )\n+    claim.save()\n+    return claim\n+\n+\n+# ─── reading ──────────────────────────────────────────────────────────────────\n+\n+\n+def load_claim(project_id: ID, claim_id: ID) -> Claim:\n+    held = Claim.load_or_none(claim_id)\n+    if held is None or held.created_by_project_id != project_id:\n+        raise ClaimRefused([f\"this project holds no claim '{claim_id}'\"])\n+    return held\n+\n+\n+def load_claims_of_shape(project_id: ID, shape_id: ID) -> list[Claim]:\n+    \"\"\"Standing or awaiting review, oldest first. A declined claim is nobody's history.\"\"\"\n+    claims = Claim.find(created_by_project_id=project_id, shape_id=shape_id)\n+    return sorted(\n+        (claim for claim in claims if claim.status != ClaimStatus.declined),\n+        key=lambda claim: claim.created_at,\n+    )\n+\n+\n+def load_run_claims(project_id: ID, run_id: ID) -> dict[str, Claim]:\n+    \"\"\"This run's own claim per shape. The citation carries the run; find() cannot select on it.\"\"\"\n+    return {\n+        claim.shape_id: claim\n+        for claim in Claim.find(created_by_project_id=project_id)\n+        if claim.citation.run_id == run_id\n+    }\n+\n+\n+def read_claimable_outputs(run_id: ID) -> list[WorkflowOutput]:",
+          "body": "read_workflow_run_outputs",
+          "themes": [
+            "naming"
+          ],
+          "speech_act": "instruction",
+          "severity": "nit",
+          "rule": "Name a reader after the record it returns."
+        },
+        {
+          "html_url": "https://github.com/surveit/carbonpaper/pull/973#discussion_r3926953543",
+          "pr": 973,
+          "thread_id": 3926953543,
+          "path": "app/tools/tool_specs.py",
+          "line": 157,
+          "start_line": null,
+          "commit_sha": "52fd29629b876c1a1c233d4d732a855f94032a72",
+          "created_at": "2026-09-03T17:20:41Z",
+          "diff_hunk": "@@ -153,24 +153,34 @@ def find_tool_names() -> set[str]:\n                 \"none; stages and published claims point at these.\",\n         },\n         description=\"\"\"\\\n-Store what this project claims: a figure the project promises to report,\n-named before any stage computes it.\n+Store what this project claims. A shape is a METRIC, not a sentence: the\n+thing being measured, tied to the methodology that measures it. \"Lobbying",
+          "body": "I think your previous read was fine that you could hold things that are expected to stay fixed into the metric itself. Like e.g. the methodology is inextricably tied to lobbying in the US (LDA data). It's not necessarily tied to US firms (well it might be because otherwise they go FARA, but whatever)",
+          "themes": [
+            "design_direction",
+            "product_copy"
+          ],
+          "speech_act": "correction",
+          "severity": "should",
+          "rule": "Scope fixed by the methodology belongs in the metric itself."
+        }
+      ],
+      "review": {
+        "pr": 973,
+        "commit_sha": "d9a1e8a95037c258498888a2bcffd5df12cd0ce9",
+        "rubric": "current_instructions",
+        "model_ids": [
+          "claude-opus-4-8[1m]"
+        ],
+        "cost_usd": 0.4280665,
+        "duration_ms": 132762,
+        "theme_vocabulary": [
+          "naming",
+          "vocabulary",
+          "code_placement",
+          "reinvents_existing",
+          "one_source_of_truth",
+          "needless_abstraction",
+          "dead_code",
+          "scope_creep",
+          "backcompat",
+          "dict_any",
+          "weak_types",
+          "fallback_or_fabrication",
+          "boundary_validation",
+          "data_model",
+          "verbose_prose",
+          "prompt_design",
+          "llm_contract",
+          "prose_accuracy",
+          "comments_and_docs",
+          "product_copy",
+          "ux_behavior",
+          "design_direction",
+          "correctness_bug",
+          "tests",
+          "gates",
+          "ignored_feedback",
+          "readability",
+          "hardcoded_values",
+          "interface_shape",
+          "review_guide",
+          "question_only",
+          "other"
+        ],
+        "predictions": [
+          {
+            "path": "tests/test_claim_minting.py",
+            "line": 301,
+            "theme": "tests",
+            "rule": "A test must assert the behaviour it names",
+            "text": "This test asserts nothing — it just checks no exception is raised. The name promises the decline was cleared; assert that (e.g. DeclinedFigure.find(...) == []).",
+            "severity": "should"
+          },
+          {
+            "path": "app/models/claims.py",
+            "line": 92,
+            "theme": "one_source_of_truth",
+            "rule": "One closed set is declared once",
+            "text": "The kind vocabulary is now written down three times: this Literal, MEMBER_KINDS just above, and the Literal on each Member subclass. Derive one from the other so they can't drift.",
+            "severity": "should"
+          },
+          {
+            "path": "app/models/claims.py",
+            "line": 85,
+            "theme": "dead_code",
+            "rule": "Do not land constants nothing in this PR reads",
+            "text": "MEMBER_KINDS and the KIND constants aren't used anywhere in this diff — the comment says they're for the form. That belongs with the screen PR, not the service half.",
+            "severity": "nit"
+          },
+          {
+            "path": "app/services/claims.py",
+            "line": 217,
+            "theme": "weak_types",
+            "rule": "Type a closed set as its enum, not str",
+            "text": "status is a RunStatus (you compare it to RunStatus.RUNNING), so type it RunStatus rather than str.",
+            "severity": "nit"
+          },
+          {
+            "path": "app/services/claims.py",
+            "line": 39,
+            "theme": "weak_types",
+            "rule": "A timestamp is datetime, not str",
+            "text": "made_at is a point in time — type it datetime rather than str.",
+            "severity": "nit"
+          }
+        ]
+      },
+      "matching": {
+        "pairs": [],
+        "unmatched_predictions": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "unmatched_reals": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20
+        ]
+      },
+      "judge_verdicts": [
+        {
+          "pair_id": 1,
+          "same_point": false,
+          "reason": "Reviewer wants Dimension replaced by a Schema concept; critic flags duplicated kind vocabulary."
+        },
+        {
+          "pair_id": 2,
+          "same_point": false,
+          "reason": "Reviewer wants Dimension via Schema; critic says MEMBER_KINDS is unused and belongs in another PR."
+        },
+        {
+          "pair_id": 3,
+          "same_point": false,
+          "reason": "Reviewer questions RelatedClaim naming; critic asks to type status as RunStatus."
+        },
+        {
+          "pair_id": 4,
+          "same_point": false,
+          "reason": "Reviewer questions why FigureMint exists; critic asks to type status."
+        },
+        {
+          "pair_id": 5,
+          "same_point": false,
+          "reason": "Reviewer says RunTally duplicates ClaimCountsForProject; critic asks to type status."
+        },
+        {
+          "pair_id": 6,
+          "same_point": false,
+          "reason": "Reviewer wants inline idiom for _count; critic asks to type status."
+        },
+        {
+          "pair_id": 7,
+          "same_point": false,
+          "reason": "Reviewer rejects mint/figure words; critic asks to type status."
+        },
+        {
+          "pair_id": 8,
+          "same_point": false,
+          "reason": "Reviewer flags confusing decline naming; critic asks to type status."
+        },
+        {
+          "pair_id": 9,
+          "same_point": false,
+          "reason": "Reviewer questions _ReadOnce; critic asks to type status."
+        },
+        {
+          "pair_id": 10,
+          "same_point": false,
+          "reason": "Same function but reviewer wants it moved out of claims; critic only fixes the parameter type."
+        },
+        {
+          "pair_id": 11,
+          "same_point": false,
+          "reason": "Reviewer says _find_restatements should return Claims; critic asks to type status."
+        },
+        {
+          "pair_id": 12,
+          "same_point": false,
+          "reason": "Reviewer says _is_one_context duplicates are_dimensions_equal; critic asks to type status."
+        },
+        {
+          "pair_id": 13,
+          "same_point": false,
+          "reason": "Reviewer objects to _describe_figure naming; critic asks to type status."
+        },
+        {
+          "pair_id": 14,
+          "same_point": false,
+          "reason": "Reviewer wants _describe_related out of services; critic asks to type status."
+        },
+        {
+          "pair_id": 15,
+          "same_point": false,
+          "reason": "Reviewer wants are_contexts_equal removed; critic asks to type status."
+        },
+        {
+          "pair_id": 16,
+          "same_point": false,
+          "reason": "Reviewer suggests read_workflow naming; critic asks to type status."
+        },
+        {
+          "pair_id": 17,
+          "same_point": false,
+          "reason": "Reviewer suggests read_workflow_run_outputs naming; critic asks to type status."
+        },
+        {
+          "pair_id": 18,
+          "same_point": false,
+          "reason": "Reviewer questions RelatedClaim naming; critic asks to type made_at datetime."
+        },
+        {
+          "pair_id": 19,
+          "same_point": false,
+          "reason": "Reviewer questions why FigureMint exists; critic asks to type made_at."
+        },
+        {
+          "pair_id": 20,
+          "same_point": false,
+          "reason": "Reviewer says RunTally duplicates existing model; critic asks to type made_at."
+        },
+        {
+          "pair_id": 21,
+          "same_point": false,
+          "reason": "Reviewer wants inline idiom for _count; critic asks to type made_at."
+        },
+        {
+          "pair_id": 22,
+          "same_point": false,
+          "reason": "Reviewer rejects mint/figure words; critic asks to type made_at."
+        },
+        {
+          "pair_id": 23,
+          "same_point": false,
+          "reason": "Reviewer flags confusing decline naming; critic asks to type made_at."
+        },
+        {
+          "pair_id": 24,
+          "same_point": false,
+          "reason": "Reviewer questions _ReadOnce; critic asks to type made_at."
+        },
+        {
+          "pair_id": 25,
+          "same_point": false,
+          "reason": "Reviewer wants describe functions moved out; critic asks to type made_at."
+        },
+        {
+          "pair_id": 26,
+          "same_point": false,
+          "reason": "Reviewer says _find_restatements should return Claims; critic asks to type made_at."
+        },
+        {
+          "pair_id": 27,
+          "same_point": false,
+          "reason": "Reviewer says _is_one_context duplicates helper; critic asks to type made_at."
+        },
+        {
+          "pair_id": 28,
+          "same_point": false,
+          "reason": "Reviewer objects to _describe_figure naming; critic asks to type made_at."
+        },
+        {
+          "pair_id": 29,
+          "same_point": false,
+          "reason": "Reviewer wants _describe_related out of services; critic asks to type made_at."
+        },
+        {
+          "pair_id": 30,
+          "same_point": false,
+          "reason": "Reviewer wants are_contexts_equal removed; critic asks to type made_at."
+        },
+        {
+          "pair_id": 31,
+          "same_point": false,
+          "reason": "Reviewer suggests read_workflow naming; critic asks to type made_at."
+        },
+        {
+          "pair_id": 32,
+          "same_point": false,
+          "reason": "Reviewer suggests read_workflow_run_outputs naming; critic asks to type made_at."
+        }
+      ],
+      "judge_cost_usd": 0.123919,
+      "judge_model_ids": [
+        "claude-opus-4-8[1m]"
+      ],
+      "score": {
+        "predicted": 5,
+        "real": 21,
+        "matched_predictions": 0,
+        "matched_reals": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0
+      }
+    },
+    {
+      "pr": 976,
+      "commit_sha": "b6c6458bc4c118f923254fe7a85efc42c774f90b",
+      "reals": [
+        {
+          "html_url": "https://github.com/surveit/carbonpaper/pull/976#discussion_r3925004664",
+          "pr": 976,
+          "thread_id": 3924945666,
+          "path": "app/models/stages/starlark.py",
+          "line": 66,
+          "start_line": null,
+          "commit_sha": "b6c6458bc4c118f923254fe7a85efc42c774f90b",
+          "created_at": "2026-09-03T13:24:05Z",
+          "diff_hunk": "@@ -63,11 +63,17 @@\n     \"function is not called `transform`.\"\n )\n \n+# `key=value` would be Starlark keyword syntax, so it cannot name a column",
+          "body": "if it's hoisted why is it on starlark.py?",
+          "themes": [
+            "question_only",
+            "code_placement"
+          ],
+          "speech_act": "question",
+          "severity": "nit",
+          "rule": "A constant shared across modules lives in the shared module."
+        }
+      ],
+      "review": {
+        "pr": 976,
+        "commit_sha": "b6c6458bc4c118f923254fe7a85efc42c774f90b",
+        "rubric": "current_instructions",
+        "model_ids": [
+          "claude-opus-4-8[1m]"
+        ],
+        "cost_usd": 0.24254150000000002,
+        "duration_ms": 95635,
+        "theme_vocabulary": [
+          "naming",
+          "vocabulary",
+          "code_placement",
+          "reinvents_existing",
+          "one_source_of_truth",
+          "needless_abstraction",
+          "dead_code",
+          "scope_creep",
+          "backcompat",
+          "dict_any",
+          "weak_types",
+          "fallback_or_fabrication",
+          "boundary_validation",
+          "data_model",
+          "verbose_prose",
+          "prompt_design",
+          "llm_contract",
+          "prose_accuracy",
+          "comments_and_docs",
+          "product_copy",
+          "ux_behavior",
+          "design_direction",
+          "correctness_bug",
+          "tests",
+          "gates",
+          "ignored_feedback",
+          "readability",
+          "hardcoded_values",
+          "interface_shape",
+          "review_guide",
+          "question_only",
+          "other"
+        ],
+        "predictions": [
+          {
+            "path": "app/services/stage_edit.py",
+            "line": 127,
+            "theme": "prose_accuracy",
+            "rule": "A shared refusal must not give one type's advice to all",
+            "text": "This 'try these instead' list is frame-function advice, and the refusal renders it for all three gated types. A `filter_rows` author gets pointed at explode/dedupe/aggregate/enrich/expand/union and never at `starlark_filter_rows`, its direct swap; a `python_row_function` author reads the same. You just scoped the trace sentence per type — scope this paragraph the same way rather than leaving it wrong for the other two.",
+            "severity": "should"
+          }
+        ]
+      },
+      "matching": {
+        "pairs": [],
+        "unmatched_predictions": [
+          0
+        ],
+        "unmatched_reals": [
+          0
+        ]
+      },
+      "judge_verdicts": [],
+      "judge_cost_usd": 0.0,
+      "judge_model_ids": [],
+      "score": {
+        "predicted": 1,
+        "real": 1,
+        "matched_predictions": 0,
+        "matched_reals": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0
+      }
+    }
+  ],
+  "unscored": [],
+  "skipped_prs": [
+    {
+      "pr": 937,
+      "reason": "the label set holds no comment on this PR"
+    },
+    {
+      "pr": 938,
+      "reason": "the label set holds no comment on this PR"
+    },
+    {
+      "pr": 939,
+      "reason": "the label set holds no comment on this PR"
+    },
+    {
+      "pr": 940,
+      "reason": "the label set holds no comment on this PR"
+    },
+    {
+      "pr": 941,
+      "reason": "the label set holds no comment on this PR"
+    },
+    {
+      "pr": 942,
+      "reason": "the label set holds no comment on this PR"
+    },
+    {
+      "pr": 943,
+      "reason": "the label set holds no comment on this PR"
+    },
+    {
+      "pr": 945,
+      "reason": "the label set holds no comment on this PR"
+    },
+    {
+      "pr": 946,
+      "reason": "the label set holds no comment on this PR"
+    },
+    {
+      "pr": 947,
+      "reason": "the label set holds no comment on this PR"
+    },
+    {
+      "pr": 948,
+      "reason": "the label set holds no comment on this PR"
+    },
+    {
+      "pr": 949,
+      "reason": "the label set holds no comment on this PR"
+    },
+    {
+      "pr": 952,
+      "reason": "the label set holds no comment on this PR"
+    },
+    {
+      "pr": 953,
+      "reason": "the label set holds no comment on this PR"
+    },
+    {
+      "pr": 954,
+      "reason": "the label set holds no comment on this PR"
+    },
+    {
+      "pr": 955,
+      "reason": "no inline comment by the reviewer that asks for something"
+    },
+    {
+      "pr": 956,
+      "reason": "the label set holds no comment on this PR"
+    },
+    {
+      "pr": 957,
+      "reason": "the label set holds no comment on this PR"
+    },
+    {
+      "pr": 958,
+      "reason": "the label set holds no comment on this PR"
+    },
+    {
+      "pr": 959,
+      "reason": "the label set holds no comment on this PR"
+    },
+    {
+      "pr": 960,
+      "reason": "the label set holds no comment on this PR"
+    },
+    {
+      "pr": 961,
+      "reason": "the label set holds no comment on this PR"
+    },
+    {
+      "pr": 962,
+      "reason": "the label set holds no comment on this PR"
+    },
+    {
+      "pr": 963,
+      "reason": "the label set holds no comment on this PR"
+    },
+    {
+      "pr": 964,
+      "reason": "the label set holds no comment on this PR"
+    },
+    {
+      "pr": 965,
+      "reason": "the label set holds no comment on this PR"
+    },
+    {
+      "pr": 966,
+      "reason": "the label set holds no comment on this PR"
+    },
+    {
+      "pr": 968,
+      "reason": "the label set holds no comment on this PR"
+    },
+    {
+      "pr": 969,
+      "reason": "the label set holds no comment on this PR"
+    },
+    {
+      "pr": 972,
+      "reason": "the label set holds no comment on this PR"
+    },
+    {
+      "pr": 974,
+      "reason": "the label set holds no comment on this PR"
+    },
+    {
+      "pr": 975,
+      "reason": "the label set holds no comment on this PR"
+    }
+  ],
+  "excluded_labels": [
+    {
+      "html_url": "https://github.com/surveit/carbonpaper/pull/951#discussion_r3914262352",
+      "reason": "left before the base branch changed at 2026-09-02T13:01:31Z, so its diff cannot be rebuilt"
+    },
+    {
+      "html_url": "https://github.com/surveit/carbonpaper/pull/951#discussion_r3914336526",
+      "reason": "left before the base branch changed at 2026-09-02T13:01:31Z, so its diff cannot be rebuilt"
+    },
+    {
+      "html_url": "https://github.com/surveit/carbonpaper/pull/955#issuecomment-5508428095",
+      "reason": "a conversation comment, not an inline one"
+    },
+    {
+      "html_url": "https://github.com/surveit/carbonpaper/pull/973#discussion_r3926123051",
+      "reason": "speech act other: asks for nothing"
+    },
+    {
+      "html_url": "https://github.com/surveit/carbonpaper/pull/973#discussion_r3926114092",
+      "reason": "follows the reviewer's earlier ask in the same thread"
+    },
+    {
+      "html_url": "https://github.com/surveit/carbonpaper/pull/973#discussion_r3926134984",
+      "reason": "follows the reviewer's earlier ask in the same thread"
+    },
+    {
+      "html_url": "https://github.com/surveit/carbonpaper/pull/973#discussion_r3926147362",
+      "reason": "follows the reviewer's earlier ask in the same thread"
+    },
+    {
+      "html_url": "https://github.com/surveit/carbonpaper/pull/973#discussion_r3926156792",
+      "reason": "follows the reviewer's earlier ask in the same thread"
+    },
+    {
+      "html_url": "https://github.com/surveit/carbonpaper/pull/973#discussion_r3926178265",
+      "reason": "follows the reviewer's earlier ask in the same thread"
+    },
+    {
+      "html_url": "https://github.com/surveit/carbonpaper/pull/973#discussion_r3926179628",
+      "reason": "follows the reviewer's earlier ask in the same thread"
+    },
+    {
+      "html_url": "https://github.com/surveit/carbonpaper/pull/976#discussion_r3925017314",
+      "reason": "follows the reviewer's earlier ask in the same thread"
+    }
+  ],
+  "overall": {
+    "predicted": 25,
+    "real": 33,
+    "matched_predictions": 0,
+    "matched_reals": 0,
+    "precision": 0.0,
+    "recall": 0.0,
+    "f1": 0.0
+  },
+  "exact_only": {
+    "predicted": 25,
+    "real": 33,
+    "matched_predictions": 0,
+    "matched_reals": 0,
+    "precision": 0.0,
+    "recall": 0.0,
+    "f1": 0.0
+  },
+  "by_theme": [
+    {
+      "theme": "needless_abstraction",
+      "definition": "A new type, wrapper, function, flag, check or special case the goal does not need; a simpler design exists.",
+      "score": {
+        "predicted": 0,
+        "real": 12,
+        "matched_predictions": 0,
+        "matched_reals": 0,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null
+      }
+    },
+    {
+      "theme": "naming",
+      "definition": "A name misdescribes what a value holds or a function does, is vague, lacks a verb, or omits a type suffix (*_id, is_*).",
+      "score": {
+        "predicted": 1,
+        "real": 10,
+        "matched_predictions": 0,
+        "matched_reals": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0
+      }
+    },
+    {
+      "theme": "design_direction",
+      "definition": "The reviewer rejects, redirects or specifies the design or product behaviour; judging it needs product context.",
+      "score": {
+        "predicted": 2,
+        "real": 4,
+        "matched_predictions": 0,
+        "matched_reals": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0
+      }
+    },
+    {
+      "theme": "code_placement",
+      "definition": "Code sits in the wrong module or layer, or a layer knows app or domain concepts it should not.",
+      "score": {
+        "predicted": 1,
+        "real": 3,
+        "matched_predictions": 0,
+        "matched_reals": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0
+      }
+    },
+    {
+      "theme": "product_copy",
+      "definition": "Wording of user-facing or model-facing product copy, as distinct from its length.",
+      "score": {
+        "predicted": 0,
+        "real": 3,
+        "matched_predictions": 0,
+        "matched_reals": 0,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null
+      }
+    },
+    {
+      "theme": "prose_accuracy",
+      "definition": "Prose states something untrue, overclaims, frames the point wrong, or does not parse.",
+      "score": {
+        "predicted": 1,
+        "real": 2,
+        "matched_predictions": 0,
+        "matched_reals": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0
+      }
+    },
+    {
+      "theme": "backcompat",
+      "definition": "A compatibility shim, legacy path or half-finished migration kept instead of a clean migration.",
+      "score": {
+        "predicted": 0,
+        "real": 2,
+        "matched_predictions": 0,
+        "matched_reals": 0,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null
+      }
+    },
+    {
+      "theme": "data_model",
+      "definition": "What a record stores and how: identity, derivable or duplicate fields, one shape versus several, persistence layout.",
+      "score": {
+        "predicted": 0,
+        "real": 2,
+        "matched_predictions": 0,
+        "matched_reals": 0,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null
+      }
+    },
+    {
+      "theme": "ignored_feedback",
+      "definition": "The agent did not do what was asked or agreed, deferred it, or reintroduced something rejected.",
+      "score": {
+        "predicted": 0,
+        "real": 2,
+        "matched_predictions": 0,
+        "matched_reals": 0,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null
+      }
+    },
+    {
+      "theme": "question_only",
+      "definition": "A clarifying question with no correction implied.",
+      "score": {
+        "predicted": 0,
+        "real": 2,
+        "matched_predictions": 0,
+        "matched_reals": 0,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null
+      }
+    },
+    {
+      "theme": "reinvents_existing",
+      "definition": "New code re-implements or duplicates an existing primitive, model, helper or tool.",
+      "score": {
+        "predicted": 0,
+        "real": 2,
+        "matched_predictions": 0,
+        "matched_reals": 0,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null
+      }
+    },
+    {
+      "theme": "vocabulary",
+      "definition": "Coined jargon, a synonym for an existing concept, or an overloaded or banned word where the project already has a word.",
+      "score": {
+        "predicted": 0,
+        "real": 2,
+        "matched_predictions": 0,
+        "matched_reals": 0,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null
+      }
+    },
+    {
+      "theme": "correctness_bug",
+      "definition": "A logic error, missed edge case, unmet real-world requirement, or a workaround instead of the root cause.",
+      "score": {
+        "predicted": 1,
+        "real": 1,
+        "matched_predictions": 0,
+        "matched_reals": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0
+      }
+    },
+    {
+      "theme": "llm_contract",
+      "definition": "Work given to the LLM, or a rule left in prompt prose, that code or schema should derive or enforce.",
+      "score": {
+        "predicted": 0,
+        "real": 1,
+        "matched_predictions": 0,
+        "matched_reals": 0,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null
+      }
+    },
+    {
+      "theme": "verbose_prose",
+      "definition": "Prose (prompt, tool description, doc, comment) longer than its content needs.",
+      "score": {
+        "predicted": 0,
+        "real": 1,
+        "matched_predictions": 0,
+        "matched_reals": 0,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null
+      }
+    },
+    {
+      "theme": "comments_and_docs",
+      "definition": "A comment, docstring or doc restates code, narrates the edit, points elsewhere, sits at the wrong altitude or should not exist.",
+      "score": {
+        "predicted": 8,
+        "real": 0,
+        "matched_predictions": 0,
+        "matched_reals": 0,
+        "precision": 0.0,
+        "recall": null,
+        "f1": null
+      }
+    },
+    {
+      "theme": "one_source_of_truth",
+      "definition": "One fact, list, rule or approach is kept in two places that must agree.",
+      "score": {
+        "predicted": 3,
+        "real": 0,
+        "matched_predictions": 0,
+        "matched_reals": 0,
+        "precision": 0.0,
+        "recall": null,
+        "f1": null
+      }
+    },
+    {
+      "theme": "weak_types",
+      "definition": "Imprecise types: str for a closed set, Optional on a required field, a missing annotation or exhaustive match.",
+      "score": {
+        "predicted": 3,
+        "real": 0,
+        "matched_predictions": 0,
+        "matched_reals": 0,
+        "precision": 0.0,
+        "recall": null,
+        "f1": null
+      }
+    },
+    {
+      "theme": "tests",
+      "definition": "A test is missing, weak, skipped, trivial, circular or restates the code.",
+      "score": {
+        "predicted": 2,
+        "real": 0,
+        "matched_predictions": 0,
+        "matched_reals": 0,
+        "precision": 0.0,
+        "recall": null,
+        "f1": null
+      }
+    },
+    {
+      "theme": "dead_code",
+      "definition": "Code, fields or branches that nothing reads or can reach.",
+      "score": {
+        "predicted": 1,
+        "real": 0,
+        "matched_predictions": 0,
+        "matched_reals": 0,
+        "precision": 0.0,
+        "recall": null,
+        "f1": null
+      }
+    },
+    {
+      "theme": "dict_any",
+      "definition": "dict[str, Any], Any or an untyped dict where a model with named fields belongs.",
+      "score": {
+        "predicted": 1,
+        "real": 0,
+        "matched_predictions": 0,
+        "matched_reals": 0,
+        "precision": 0.0,
+        "recall": null,
+        "f1": null
+      }
+    },
+    {
+      "theme": "readability",
+      "definition": "Code a reader cannot follow locally: roundabout control flow, unexplained sentinels, long functions.",
+      "score": {
+        "predicted": 1,
+        "real": 0,
+        "matched_predictions": 0,
+        "matched_reals": 0,
+        "precision": 0.0,
+        "recall": null,
+        "f1": null
+      }
+    }
+  ],
+  "review_cost_usd": 2.8245685,
+  "judge_cost_usd": 0.164001,
+  "review_model_ids": [
+    "claude-opus-4-8[1m]"
+  ],
+  "judge_model_ids": [
+    "claude-opus-4-8[1m]"
+  ]
+}

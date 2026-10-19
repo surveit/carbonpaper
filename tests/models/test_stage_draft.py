@@ -147,7 +147,7 @@ def test_stage_keeps_the_server_owned_fields_the_draft_never_declares():
 # ── `cache` on a type that never consults one ────────────────────────────────
 @pytest.mark.parametrize("stage_type", [
     "input_data", "enrich", "expand", "aggregate", "report", "union",
-    "explode", "dedupe", "sort_rank", "python_frame_function",
+    "explode", "dedupe", "sort_rank", "python_frame_function", "read_pages",
 ])
 def test_every_type_that_ignores_cache_says_why(stage_type):
     reason = find_cache_ignored_reason(StageType(stage_type))

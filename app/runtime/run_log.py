@@ -60,6 +60,8 @@ LLM_SYSTEM = "llm_system"
 # computed, rather than the two looking identical.
 SOURCE_CACHED = "cached"
 SOURCE_COMPUTED = "computed"
+# The terminal row event's field naming the judgment that decided the row, where one did.
+JUDGMENT_ID = "judgment_id"
 
 # Verbosity levels. Every event carries one; the run page filters by it.
 #   0 = lifecycle: run/stage/row start·done — the coarse "what happened" spine.

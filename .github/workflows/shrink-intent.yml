@@ -1,0 +1,31 @@
+name: shrink-intent
+
+# Not in ci.yml: a label or retitle re-runs this, and would re-run the whole suite there.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled]
+
+concurrency:
+  group: shrink-intent-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  shrink-intent:
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'grows-on-purpose') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: List the PR's files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FILES_PATH: repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files
+        run: gh api --paginate --slurp "$FILES_PATH" > "$RUNNER_TEMP/pr-files.json"
+      # Through env, never ${{ }} inside `run`: the title is author text and would execute as shell.
+      - name: Check a removal title shrinks the non-test lines
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: python3 scripts/check_removal_pr_shrinks.py --title="$TITLE" --pr-files="$RUNNER_TEMP/pr-files.json"

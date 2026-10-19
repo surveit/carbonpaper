@@ -11,6 +11,9 @@ from app.seeds.bootstrap import configure_default_document_store, configure_proj
 from app.seeds.seed import discover_workflow_files, seed_all
 from app.services.project_record import read_project_name
 
+# Registers every pack's connector kinds, so a stored workflow naming one parses.
+from app import packs as _packs  # noqa: F401
+
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(

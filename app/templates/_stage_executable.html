@@ -221,6 +221,17 @@
 </section>
 {% endif %}
 
+{% if block == 'read_pages' %}
+<section class="exec-block">
+    <h2>📄 Read pages</h2>
+    <p class="muted">One row per page of each file the input names. A PDF is read page by
+        page; a text or HTML file is one page. Each row holds the page's text as read, and a
+        span quoting all of it.</p>
+    <h3>copied onto every page row</h3>
+    <p><code>source_id</code>, <code>source_sha256</code>{% for column in stage.read_pages.carry %}, <code>{{ column }}</code>{% endfor %}</p>
+</section>
+{% endif %}
+
 {% if block == 'queue' %}
 <section class="exec-block">
     <h2>👤 Review queue</h2>

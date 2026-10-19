@@ -67,6 +67,14 @@ def test_a_workflow_with_a_warning_lists_it_instead(tmp_path):
     assert "0 errors" not in page
 
 
+def test_a_workflow_counts_its_errors_apart_and_lists_them_first(tmp_path):
+    load = _make_load_stage(str(tmp_path / "things.csv"))
+    del load["row_type_id"]
+    page = _workflow_page(tmp_path, "unnamed", [load, _UNDESCRIBED])
+    assert "1 error, 1 warning" in page
+    assert page.index("<code>unnamed_rows</code>") < page.index("<code>undescribed</code>")
+
+
 def test_a_workflow_that_does_not_load_fails_loudly(tmp_path):
     # A relative connector path is rejected by input_data, so nothing types.
     with pytest.raises(WorkflowLoadError, match="ABSOLUTE"):

@@ -38,6 +38,9 @@ from app.tools.prompt_fragments import render_link_map
 from app.agents.tutorial.config import build_tutorial_tools
 from app.tools.tutorial import TutorialContext
 
+# Registers every pack's connector kinds, so a stored workflow naming one parses.
+from app import packs as _packs  # noqa: F401
+
 # The generation agents put their input in the TASK (the user message), not the system
 # prompt, so any value builds the same prompt and the same submit_answer schema. The
 # task itself is per-run and is not dumped.
@@ -52,10 +55,11 @@ _UNUSED_BUNDLE = EvidenceBundle(
     claim_id="<claim_id>", claim_text=_UNUSED_DOCUMENT, claim_context={},
     cited=StageOutputCellCitation(
         run_id="<run_id>", stage_id="<stage_id>", row_ordinal=0, column="<column>", value=0),
+    cited_passage=None,
     shape=ClaimShapeInput(label="<shape>", universe=DataUniverseRequirement.closed,
                           importance=ClaimImportance.primary),
     run_read_everything=True, outputs=[], cited_slug="<slug>", stages=[], branches=[],
-    input_columns=[], terms="", methodology=None,
+    input_columns=[], method=None,
 )
 
 

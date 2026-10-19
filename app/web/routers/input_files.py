@@ -4,19 +4,20 @@ from __future__ import annotations
 
 import csv
 import io
+from pathlib import PurePath
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
 
 from app.core.errors import (
     ColumnNotInFrame,
+    MissingInputBindingError,
     RowOutOfRange,
     RunVersionUnresolvableError,
     StageNotInRun,
 )
 from app.core.frames import read_frame_table, read_native_scalar_as_json
 from app.models.citations import StageOutputCellCitation
-from app.models.schema import StageId
 from app.runtime.errors import MissingLineage
 from app.services.workspace import resolve_run_dir
 from app.web import input_files_view
@@ -28,7 +29,7 @@ router = APIRouter()
 
 _BASE = "/project/{project_id}/runs/{run_id}/input-files"
 _UNREADABLE = (MissingLineage, StageNotInRun, RowOutOfRange, ColumnNotInFrame,
-               RunVersionUnresolvableError)
+               RunVersionUnresolvableError, MissingInputBindingError)
 
 
 @router.get(f"{_BASE}/panel", response_class=HTMLResponse)
@@ -51,9 +52,9 @@ def input_files_panel(request: Request, project_id: str, run_id: str,
 
 @router.get(f"{_BASE}/slice.csv")
 def input_file_slice(project_id: str, run_id: str, stage: str, row: int,
-                           column: str, input: str, rows: Basis = Basis.relevant,
+                           column: str, file: int, rows: Basis = Basis.relevant,
                            columns: Basis = Basis.relevant):
-    slice_ = _find_file(_load(project_id, run_id, stage, row, column), input)
+    slice_ = _find_file(_load(project_id, run_id, stage, row, column), file)
     wanted = _choose_columns(slice_, columns)
     frame = read_frame_table(
         resolve_run_dir(project_id, run_id, RunKind.production) / "outputs" / f"{slice_.stage_id}.parquet")
@@ -61,7 +62,7 @@ def input_file_slice(project_id: str, run_id: str, stage: str, row: int,
         io.StringIO(_render_as_csv(frame, _choose_rows(slice_, rows), wanted)),
         media_type="text/csv",
         headers={"Content-Disposition":
-                 f'attachment; filename="{slice_.stage_id}-slice.csv"'})
+                 f'attachment; filename="{PurePath(slice_.filename).stem}-slice.csv"'})
 
 
 def _load(project_id: str, run_id: str, stage: str, row: int,
@@ -70,18 +71,18 @@ def _load(project_id: str, run_id: str, stage: str, row: int,
         run_id=run_id, stage_id=stage, row_ordinal=row, column=column, value=None))
 
 
-def _find_file(view: InputFilesView, stage_id: StageId) -> InputFileSlice:
-    for one in view.files:
-        if one.stage_id == stage_id:
-            return one
+def _find_file(view: InputFilesView, file: int) -> InputFileSlice:
+    """`file` is the file's place in `view.files`, as the panel listed them."""
+    if 0 <= file < len(view.files):
+        return view.files[file]
     raise HTTPException(status_code=404,
-                        detail=f"this figure read no file at '{stage_id}'")
+                        detail=f"no file {file} among the {len(view.files)} this figure read")
 
 
 def _choose_rows(slice_: InputFileSlice, rows: Basis) -> list[int]:
     if rows is Basis.all:
-        return list(range(slice_.rows_read))
-    return list(slice_.ordinals)
+        return list(slice_.ordinals_read)
+    return list(slice_.ordinals_relevant)
 
 
 def _choose_columns(slice_: InputFileSlice, columns: Basis) -> list[str]:

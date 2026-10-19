@@ -65,6 +65,15 @@ def read_frame_file(path: Path) -> pd.DataFrame:
     return _read_frame_parquet(path) if path.suffix == PARQUET_SUFFIX else pd.read_csv(path)
 
 
+# Not read_frame_file's own mapping: that frame feeds row fingerprints, which this would move.
+def read_frame_file_for_display(path: Path) -> pd.DataFrame:
+    """A struct column stays arrow-typed, where pandas would float its ints beside a null row."""
+    if path.suffix != PARQUET_SUFFIX:
+        return pd.read_csv(path)
+    table = pq.read_table(path, use_pandas_metadata=True)
+    return table.to_pandas(types_mapper=_map_nested_type_to_arrow_dtype)
+
+
 def write_frame_file(frame: pd.DataFrame, path: Path) -> None:
     if path.suffix == PARQUET_SUFFIX:
         frame.to_parquet(path, index=False)
@@ -212,6 +221,12 @@ def _map_list_type_to_arrow_dtype(arrow_type: pa.DataType) -> pd.ArrowDtype | No
     ):
         return pd.ArrowDtype(arrow_type)
     return None
+
+
+def _map_nested_type_to_arrow_dtype(arrow_type: pa.DataType) -> pd.ArrowDtype | None:
+    if pa.types.is_struct(arrow_type):
+        return pd.ArrowDtype(arrow_type)
+    return _map_list_type_to_arrow_dtype(arrow_type)
 
 
 def read_frame_column_names(path: Path) -> list[str]:

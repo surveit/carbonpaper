@@ -20,6 +20,29 @@ All routes live under `/project/{project}/…`.
   the run's own manifest is never touched, and the run page, its outputs and the
   spend it counts toward are unaffected. The runs picker lists the unarchived side.
 
+## Comparing two runs (`run_compare.html`)
+
+`GET /project/{p}/runs/{a}/compare/{b}` (`app/web/routers/run_diff.py`). The runs
+index links each run to the run before it on the same version.
+
+- `app.services.run_diff.compare_runs` refuses two runs pinned to different
+  versions (409, naming both). Otherwise it compares each stage both runs finished
+  three ways: row count, column set, and each row's content at its position, by
+  `compute_row_fingerprint` over the columns both outputs hold.
+- It first compares what each stage read: its files' sha256 (`read_input_bindings`)
+  and its row window. The page says both runs read the same files, or names each
+  stage whose files or window differ.
+- A stage's input is identical when its window matches and either its files' hashes
+  match (a stage with no upstream) or every upstream output is identical. A stage that
+  differs from identical input is a **replay violation** (fail tint, naming its first
+  differing row). One whose input differed only **differs** (neutral tint): a changed
+  file, a different cap, or a model answer upstream.
+- `llm_transform` and `human_review_queue` are listed and not compared: their rows
+  are judgments, which two runs may make differently. A stage that did not finish in
+  both runs is listed with both statuses.
+- Each stage that differs shows its first three differing rows, run A above run B,
+  over the columns they differ in, with links to both runs' full rows pages.
+
 ## Run detail page (`run_detail.html`)
 
 `GET /project/{p}/runs/{run_id}`.
@@ -34,7 +57,10 @@ All routes live under `/project/{project}/…`.
   detail panel sits below it. Per-state borders via `build_mermaid_graph` status
   strokes: green=complete, yellow=in-progress, red=error, grey=pending,
   blue=awaiting review.
-- **Live polling**: while the manifest says `running`, JS polls
+- **Live polling**: `POST /project/{p}/run` calls `run.start_run`: `prepare_run` writes
+  the initial `running` manifest, the run executes on a background thread, and the route
+  redirects here.
+  While the manifest says `running`, JS polls
   `GET …/runs/{id}/status` every 2s and updates progress + re-renders the graph
   in place, then reloads once on the terminal transition. Terminal runs don't
   poll.
@@ -72,11 +98,13 @@ after injection — without that, the panel's JS (the tab strip, the run log) is
   what each input supplies, then the stage's output — both resolved for the whole
   workflow and handed to the page as a `WorkflowStage` — reached from the `schema`
   link on a table's head and left by `← data`.
-- The **simulator** is its own page, `…/stage/{sid}/simulate`, linked from
-  Transform: the folded transform, the input rows with per-row checkboxes, the
-  controls, then the result. Running it POSTs `…/stage/{sid}/preview`, which
-  executes the handler in memory (real LLM calls for `llm_transform`) and
-  persists nothing.
+- The **simulator** is its own page, `…/stage/{sid}/simulate`
+  (`run_stage_simulate.html`), linked from Transform: the folded transform, the input
+  rows with per-row checkboxes, the controls, then the result, in one column. Running
+  it POSTs `…/stage/{sid}/preview` (`app/runtime/preview.py`), which executes the
+  handler in memory (real LLM calls for `llm_transform`) and persists nothing. Only
+  `PREVIEWABLE_TYPES` run there, the types whose handlers write nothing to disk; the
+  page 404s for any other type and for a stage whose pinned version does not resolve.
 - **Full-table view + CSV**: `…/stage/{sid}/rows` renders the entire stage
   output (not just the first-5 preview) — as the same diff where one exists,
   over `MAX_TABLE_ROWS` rows instead of the panel's five, keeping the page's row
@@ -96,7 +124,9 @@ after injection — without that, the panel's JS (the tab strip, the run log) is
   tinted, so the reason the reader opened the stage is not off the right edge
   behind a horizontal scroll (`app.web.column_order`, over
   `signature.list_written_column_names` — presentation order only, and the frame
-  on disk and the CSV download keep the order the stage wrote). Behind them
+  on disk and the CSV download keep the order the stage wrote; a stage whose pinned
+  version does not resolve declares nothing, so every surface keeps the frame's own
+  order). Behind them
   every input column holds its own relative position: one the stage dropped is
   struck through, carrying the input value it discarded. Each column header carries the colour-free mark for what
   happened to it — `+` on an added column, `−` on a dropped one, where the strike
@@ -120,7 +150,8 @@ after injection — without that, the panel's JS (the tab strip, the run log) is
   columns, so it reports neither — a zero it never counted would be invented.
   Every other stage type keeps the plain output
   view, and any stage whose alignment can't be verified (missing frame,
-  row-count mismatch, no lineage recorded) falls back to it.
+  row-count mismatch, no lineage recorded) falls back to it: `build_stage_diff`
+  returns None for both.
 
 ## Review queue (`queue.html`, `_queue_card.html`)
 
@@ -134,7 +165,9 @@ nothing about the upstream stage or its column names. The queued row itself is
 the material to review: the columns the queue declares as `reviewed_columns`
 sources each render as their own row in the review section, one field decided
 at a time. `queue.context_columns` optionally names the ordered background
-context rendered as a key/value table. When omitted, every other column the
+context rendered as a key/value table; a span value there is its quote, then
+`p. N of <file>` linked to that page (`span_cites`, the file named from the run's
+input bindings). When omitted, every other column the
 stage reads remains visible for compatibility; an empty list renders no context.
 This display choice does not remove columns from the stage output. A context
 column must exist in the input schema, be read by the stage, appear only once,
@@ -289,6 +322,11 @@ header names the stage, the row and the column; three tabs under it:
   `cited_stage`, `column`, `steps`, `nodes`, `edges` and `sheets`.
 - **Input files** (`_input_files_panel.html` ← `app/web/routers/input_files.py`)
   — each source file the figure read, sliced to the rows and columns it used.
+  A row's file comes from its input's lineage. Its number is the sheet row the
+  connector stamped under `source_row_column`, else its place in that file.
+  A file whose bytes the project holds links its page. A fetched file the run named by id
+  also says where and when it was fetched; a match on bytes alone may be a later fetch.
+  A packet shows the run's whole list instead (`_lineage_inputs.html`), with the same origin line.
 
 The Rows & columns tab fetches its walk when first opened, for the header's
 column. In a review packet the page is a file in a zip with no server to ask,
@@ -303,6 +341,22 @@ nothing to open.
 `/project/<id>/files/<file_id>`, which the Files table's rows open. Four sections under
 a head naming the file: what its holder claims about it, its shape, its first rows, and
 the runs that read it — then the delete, which takes the filename typed back.
+
+The head says how the file arrived: `uploaded` and when, or `fetched` and when, linking
+the URL `receive_source` (`app/core/files.py`) was given. Only it and
+`receive_mirrored_source` record an origin and a fetch time, so a file without them was
+uploaded. A mirrored file's time is the one its mirror recorded, taken only once the bytes
+hash to the sha256 recorded with it. The Files table says the same in its
+`added` column.
+
+A **text Source** (pdf, txt, md, html) leads with one page of its text
+(`_source_page.html` ← `app/web/source_page_view.py`), read by `app/core/text_sources.py`:
+the same characters every span's quote is checked against. `?page=N&start=S&end=E` is
+the query `build_source_page_url` writes into a span's link; it opens page N with
+characters S to E marked, and a range the page does not hold says so and marks nothing.
+The page links the pages either side and the stored bytes at `#page=N`
+(`…/files/<file_id>/bytes`: inline for a PDF, a download for anything else, so stored
+HTML never runs).
 
 **Data completeness** is a claim about the rows, not a state of the work. `closed` says
 these rows are all of them, `sampled` says they are a subset and the note beside it says
@@ -345,6 +399,27 @@ values differ across the most files, not the one that disagrees most: `Author Na
 disagrees most across those four exports and every one of them leads with
 `Comment on Valeurs actuelles`, which is a cell that reads the same on every row.
 When no column clears the floor, the page says nothing separates them.
+
+## A span cell (`span_cites` in `_data_cell.html` ← `app/web/span_cells.py`)
+
+A `span` or `list[span]` cell prints as its quotes, each cut to 120 characters with the whole
+quote in its title, then its locator's label (`page 3`) linked to that page of its file with
+the quote's characters marked: the text Source view above (`PanelLinks.source_page`). A span
+naming no page links the top of its file's page. The run page's Data tab, the full rows
+page, the lineage row view and the packet's pages draw it the same way. A packet links
+`sources/<id>/pages/<n>.txt` where it holds that page, one a verified published span sits
+on, and prints the label unlinked otherwise. A stage diff marks a span cell changed when the
+same quote now sits at another address.
+
+## One model judgment (`judgment.html` ← `app/web/routers/judgments.py`)
+
+`GET /project/{p}/judgments/{judgment_id}`: the model, when it answered, its usage, the run,
+stage and row it decided, then the system prompt, the task and the reply. One batched call
+judged several rows, so its page says how many its usage covers. The full rows page links
+each row a model decided to its judgment (`link_row_judgments`), wherever the run log names
+one this project stores. A model stage that made no call in a run, its rows all replayed
+from the cache, names the models its judgments record, or says they are not stored here or
+were recorded before judgments were kept.
 
 ## The node panel + workflow versioning (`_node_panel.html`, `versions.html`)
 
@@ -420,6 +495,28 @@ question — is this link back into this app?
 Neither host names an agent. What a surface calls one is
 `AgentConfig.display_name`, and `tests/arch/test_chat_rail_names_no_agent.py`
 fails a build where a chat host learns an agent id.
+
+## The review packet (`app/web/review_packet/`, `app/services/review_packet/`)
+
+`export_review_packet` writes one folder per run, every file hashed in `checksums.txt`. The
+pages (`pages.py`, `lineage.py`) are the run's own templates rendered to files. The data half
+(`app/services/review_packet/data.py`) writes what a reader checks them against, and
+`archive.py` hands it what only the web layer may read off the run: each stage's lineage
+sidecar, the judgment ids the run log names, and the verifier's verdict on each published span.
+
+| File | What it holds |
+|---|---|
+| `sources.json` | each file the run read: stored id, sha256, origin URL, fetch time, its copy in `inputs/` |
+| `judgments.jsonl` | each `Judgment` a row of the run names on the log, computed or replayed |
+| `spans.json` | each span a published table holds, and the verifier's refusal, or null where it held |
+| `sources/<id>/pages/<n>.txt` | the text of each page a verified span sits on, newlines as extracted |
+| `methodology.md`, `terms.json` | what the run's version kept |
+| `data/raw/<stage>.lineage.parquet` | each stage's lineage sidecar, beside its raw output |
+
+A file the run owed and the packet could not write is listed on the index with its reason:
+an unpinned version's method, or model rows naming no judgment (a test run, or cache entries
+recorded before judgments were kept). The index prints the CourtListener attribution when a
+file the run read came from `storage.courtlistener.com` or `www.courtlistener.com`.
 
 ## Where to confirm visually
 

@@ -91,12 +91,11 @@ class StageType(str, Enum):
     filter_rows = "filter_rows"
     starlark_row_function = "starlark_row_function"
     starlark_filter_rows = "starlark_filter_rows"
-    # Three declared reshapes, each recording per-row provenance the runtime works
-    # out itself — which is what separates them from a python_frame_function doing
-    # the same pandas call and taking the trace with it.
+    # Three declared reshapes whose lineage the runtime works out; a frame function reports its own.
     explode = "explode"
     dedupe = "dedupe"
     sort_rank = "sort_rank"
+    read_pages = "read_pages"
 
 
 
@@ -126,7 +125,7 @@ def find_row_effect(stage_type: StageType) -> RowEffect:
               | StageType.sort_rank | StageType.dedupe | StageType.union):
             return RowEffect.selects
         # Rows no input row stands behind one-for-one: fanned out, fanned in, reshaped.
-        case (StageType.aggregate | StageType.explode
+        case (StageType.aggregate | StageType.explode | StageType.read_pages
               | StageType.expand | StageType.python_frame_function):
             return RowEffect.builds
         # Reads the rows and emits none.

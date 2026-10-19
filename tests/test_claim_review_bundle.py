@@ -374,13 +374,21 @@ def _write_a_table_and_a_verb() -> None:
         verbs=[Verb(name="funded", definition="Paid out.")]))
 
 
-def test_a_term_the_project_defines_is_accepted_and_one_it_lacks_is_refused(claim):
+def test_a_term_the_runs_version_kept_is_accepted_and_one_it_lacks_is_refused(projects_root):
     _write_a_table_and_a_verb()
+    claim = claim_the_total(run_the_fixture(projects_root))
 
-    assert "which the project's terms do not define" in _refuse_citing(
+    assert "which the run's workflow version does not define" in _refuse_citing(
         claim, TermCitation(name="grants"))
     stored = _store_citing(claim, [TermCitation(name="grant"), TermCitation(name="funded")])
     assert len(stored.challenges[0].citations) == 2
+
+
+def test_a_term_written_after_the_run_is_refused(claim):
+    _write_a_table_and_a_verb()
+
+    assert "which the run's workflow version does not define" in _refuse_citing(
+        claim, TermCitation(name="funded"))
 
 
 def test_a_table_claim_is_refused_with_the_reason(projects_root):

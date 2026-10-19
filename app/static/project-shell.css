@@ -347,3 +347,8 @@
 .vd-history-when { display: block; font-size: 11.5px; color: var(--muted);
     font-variant-numeric: tabular-nums; }
 .vd-history-msg { display: block; font-size: 13px; color: var(--fg); margin-top: 1px; }
+/* What the version kept of the project's methodology and terms, folded under its header. */
+.vd-method, .vd-method-note { margin: 0 0 14px; font-size: 13px; }
+.vd-method-note { color: var(--muted); }
+.vd-method > summary { cursor: pointer; color: var(--muted); }
+.vd-method[open] > summary { margin-bottom: 10px; }

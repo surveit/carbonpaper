@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% from "_sparkle.html" import sparkle %}
+{#
+  ONE MODEL JUDGMENT — the call behind a row: the model, when it answered, what the answer
+  cost, what it was told, what it was asked and what it replied, with the run, stage and row
+  it decided. A batched call judged several rows at once, so its task holds every one of them.
+
+  Context the route passes: crumbs; page = app.web.judgment_view.build_judgment_page(...).
+#}
+{% block title %}judgment · {{ page.judgment.stage_id }} · {{ page.judgment.run_id }}{% endblock %}
+
+{% block breadcrumbs %}{% include "_breadcrumbs.html" %}{% endblock %}
+
+{% block content %}
+{% set judgment = page.judgment %}
+{% set usage = judgment.usage %}
+<div class="run-topbar">
+    <h1>{{ sparkle() }} Model judgment</h1>
+</div>
+
+<section class="exec-block">
+    <dl class="kv">
+        <dt>model</dt><dd><code>{{ judgment.model }}</code></dd>
+        <dt>decided</dt><dd>{{ judgment.decided_at | friendly_time }}</dd>
+        {# `calls` of zero means the backend reported no usage, which is not a measured $0.00. #}
+        <dt>usage</dt><dd>
+            {%- if usage.calls %}{{ usage.calls | figure }} call{% if usage.calls != 1 %}s{% endif %}
+            · {{ usage.input_tokens | figure }} tokens in · {{ usage.output_tokens | figure }} out
+            · {{ usage.cost_usd | usd }}
+            {%- else %}not reported{% endif %}
+            {%- if page.rows_in_call %} <span class="muted">— one call covering {{ page.rows_in_call | figure }} rows, this one among them</span>{% endif %}</dd>
+        {% if page.from_another_workspace %}
+        <dt>run</dt><dd>recorded by run <code>{{ judgment.run_id }}</code> in the workspace the cache came from</dd>
+        <dt>stage</dt><dd><code>{{ judgment.stage_id }}</code></dd>
+        {% else %}
+        <dt>run</dt><dd><a href="{{ page.links.run_page() }}"><code>{{ judgment.run_id }}</code></a></dd>
+        <dt>stage</dt><dd><a href="{{ page.links.stage_anchor(judgment.stage_id) }}"><code>{{ judgment.stage_id }}</code></a></dd>
+        <dt>row</dt><dd>
+            {%- if page.row is not none %}<a href="{{ page.links.row_trace(judgment.stage_id, page.row) }}">row {{ page.row | row_number }}</a>
+            {%- else %}<span class="muted">the run's log names no row for it</span>{% endif %}</dd>
+        {% endif %}
+    </dl>
+</section>
+
+<section class="exec-block">
+    <h3>what the model was told</h3>
+    <pre class="prompt">{{ judgment.system_prompt }}</pre>
+    <h3>what it was asked</h3>
+    <pre class="prompt rendered">{{ judgment.task }}</pre>
+    <h3>what it replied</h3>
+    <pre class="yaml-block">{{ page.reply_text }}</pre>
+</section>
+{% endblock %}

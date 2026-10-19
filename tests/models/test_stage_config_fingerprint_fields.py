@@ -15,6 +15,7 @@ from app.models.stages.input_data import Connector
 from app.models.stages.join import JoinConfig
 from app.models.stages.llm_transform import LLMConfig
 from app.models.stages.filter_rows import FilterConfig
+from app.models.stages.read_pages import ReadPagesConfig
 from app.models.stages.report import ReportConfig
 from app.models.stages.sort_rank import SortRankConfig
 from app.models.stages.starlark import StarlarkFunction
@@ -26,7 +27,7 @@ from app.models.stages.union import UnionConfig
 _CONFIG_CLASSES = [
     Connector, LLMConfig, PythonFunction, JoinConfig, AggregateConfig, QueueConfig,
     ReportConfig, UnionConfig, FilterConfig, StarlarkFunction,
-    ExplodeConfig, DedupeConfig, SortRankConfig, StarlarkFilter,
+    ExplodeConfig, DedupeConfig, SortRankConfig, StarlarkFilter, ReadPagesConfig,
 ]
 
 

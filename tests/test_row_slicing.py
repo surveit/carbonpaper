@@ -18,7 +18,12 @@ _NAME_VAL_SCHEMA = {"columns": [{"name": "name", "type": "str", "nullable": True
 _SEEN_SCHEMA = {"columns": [*_NAME_VAL_SCHEMA["columns"],
                             {"name": "seen", "type": "int", "nullable": True}]}
 
-_COUNT_THE_FRAME = "def transform(df):\n    return df.assign(seen=len(df))\n"
+_COUNT_THE_FRAME = (
+    "def transform(df, *, lineage):\n"
+    "    for row in range(len(df)):\n"
+    "        lineage.built_from(row, 'src', row)\n"
+    "    return df.assign(seen=len(df))\n"
+)
 _REFUSE_PAST_ROW_2 = (
     "def transform(row):\n"
     "    if row['val'] > 2:\n"

@@ -17,6 +17,7 @@ from app.runtime.manifest import resolve_output_path
 from app.services.workspace import resolve_run_dir
 from app.web.stage_diff import FILTER_TYPES, FilterRowsDiff, build_stage_diff
 from app.web.canvas_payload import CanvasSheet, SheetRow
+from app.web.span_cells import render_span_cell
 from app.models.run_manifest import RunKind
 
 PREVIEW_ROWS = 8
@@ -95,9 +96,15 @@ def _choose_rows(frame: pa.Table, mine: list[RowOrdinal]) -> list[SheetRow]:
 
 def _read_rows(frame: pa.Table, ordinals: list[RowOrdinal], mine: bool) -> list[SheetRow]:
     taken = frame.take(pa.array(ordinals, type=pa.int64()))
-    columns = [[render_sheet_cell(convert_cell_to_json_value(value))
+    columns = [[render_sheet_cell(_read_sheet_value(value))
                 for value in taken.column(name).to_pylist()]
                for name in taken.column_names]
     return [SheetRow(ordinal=ordinal, cells=[column[position] for column in columns],
                      mine=mine, dropped=False)
             for position, ordinal in enumerate(ordinals)]
+
+
+def _read_sheet_value(value: object) -> JsonScalar:
+    """A span cell reads as its quotes: a sheet is too small to link them."""
+    span_text = render_span_cell(value)
+    return convert_cell_to_json_value(value) if span_text is None else span_text

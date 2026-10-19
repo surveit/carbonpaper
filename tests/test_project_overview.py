@@ -87,10 +87,10 @@ def test_a_halted_run_is_offered_its_review_rather_than_a_chat():
     assert not waiting.action.opens_a_chat() and waiting.action.href.endswith(_RUN)
 
 
-def test_a_run_that_wrote_no_figure_says_why_none_can_be_added_now():
+def test_a_run_that_wrote_no_result_says_why_none_can_be_added_now():
     _record_run()
     warning = _build().checks[0]
-    assert warning.headline == "This run produced no figures."
+    assert warning.headline == "This run produced no results."
     assert warning.action.opens_a_chat()
 
 

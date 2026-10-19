@@ -39,7 +39,7 @@
             <td><span class="type-pill">{{ c.type }}</span></td>
             <td>{% if c.nullable %}<span class="muted">optional</span>{% else %}<span class="strong">required</span>{% endif %}</td>
             <td>{{ constraint_cell(c) }}</td>
-            <td>{{ c.description or '' }}{% if c.source %} <span class="muted">[{{ c.source }}]</span>{% endif %}</td>
+            <td>{% if c.quoted_from %}A verbatim quote from <code>{{ c.quoted_from }}</code>. {% endif %}{{ c.description or '' }}{% if c.source %} <span class="muted">[{{ c.source }}]</span>{% endif %}</td>
         </tr>
         {% endfor %}
     </tbody>

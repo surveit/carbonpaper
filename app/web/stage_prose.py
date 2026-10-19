@@ -39,6 +39,8 @@ def say_what_a_stage_did(stage: AbstractStage) -> str:
             return "Give every value in a list column a row of its own"
         case StageType.sort_rank:
             return "Put the rows in order and number them"
+        case StageType.read_pages:
+            return "Read each file a page at a time, one row per page"
         case StageType.human_review_queue:
             return "Hand the rows to a reviewer to decide"
         case StageType.report:

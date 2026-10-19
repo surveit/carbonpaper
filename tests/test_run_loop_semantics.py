@@ -18,7 +18,7 @@ from app.services.loader import load_workflow
 from app.services import workspace
 from conftest import (
     pinned_stages, queue_added_columns, queue_columns, resumed_stages,
-    run_like_the_app,
+    run_like_the_app, script_judgment,
 )
 from stage_seed import add_stage, save_version
 from run_seed import read_manifest, store_manifest
@@ -62,15 +62,18 @@ def _raising_stage(stage_id, input_id, name="Boom", schema=_ID_VAL_SCHEMA):
             "inputs": [{"id": input_id}],
             "signature": {"form": "replaces", "produces": schema["columns"]},
             "function": {"kind": "inline",
-                         "code": "def transform(df):\n    raise ValueError('boom')\n"}}
+                         "code": "def transform(df, *, lineage):\n    raise ValueError('boom')\n"}}
 
 
 def _passthrough_stage(stage_id, input_id, name="Passthrough", schema=_ID_VAL_SCHEMA):
     return {"id": stage_id, "description": name, "type": "python_frame_function",
             "inputs": [{"id": input_id}],
             "signature": {"form": "replaces", "produces": schema["columns"]},
-            "function": {"kind": "inline",
-                         "code": "def transform(df):\n    return df\n"}}
+            "function": {"kind": "inline", "code": (
+                "def transform(df, *, lineage):\n"
+                "    for row in range(len(df)):\n"
+                f"        lineage.built_from(row, {input_id!r}, row)\n"
+                "    return df\n")}}
 
 
 def _score_load_stage(root):
@@ -396,7 +399,7 @@ def test_row_error_stage_blocks_downstream_and_resume_is_not_stale(tmp_path, mon
     def fake_call_llm(stage_id, llm_config, row, **kwargs):
         if row["text"] == failing["text"]:
             raise RuntimeError("boom")
-        return {"score": 5}
+        return script_judgment({"score": 5})
 
     monkeypatch.setattr(lt, "call_llm", fake_call_llm)
 

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from app.web.diff_state import CellDiffState
+from app.web.panel_links import AppPanelLinks
 from app.web.trace_row_diff import build_row_diff, row_diff_to_dict
 
 
@@ -68,9 +69,10 @@ def test_a_carried_column_the_stage_read_is_not_inert():
 
 
 def test_the_payload_names_each_state_as_a_plain_string():
-    payload = row_diff_to_dict(build_row_diff({"a": "x"}, {"a": "y"}, writes_every_column=False))
+    payload = row_diff_to_dict(build_row_diff({"a": "x"}, {"a": "y"}, writes_every_column=False),
+                               AppPanelLinks("p", "r"))
     assert payload["columns"] == [
-        {"name": "a", "state": "changed", "text": "x", "was": "y", "inert": False}]
+        {"name": "a", "state": "changed", "text": "x", "was": "y", "inert": False, "cites": []}]
     assert (payload["added"], payload["changed"], payload["dropped"]) == (0, 1, 0)
 
 

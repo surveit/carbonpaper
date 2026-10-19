@@ -34,6 +34,8 @@ TYPE_CLASS = {
     "explode": "rowset",
     "dedupe": "rowset",
     "sort_rank": "rowset",
+    # Reads stored files into rows, as input_data does.
+    "read_pages": "input",
 }
 
 TYPE_GLYPH = {
@@ -53,6 +55,7 @@ TYPE_GLYPH = {
     "explode": "🌱",
     "dedupe": "🧹",
     "sort_rank": "🔢",
+    "read_pages": "📄",
 }
 
 # What the type tag SAYS. The slug is the id the config, the manifest and the
@@ -63,8 +66,8 @@ TYPE_GLYPH = {
 TYPE_LABEL = {
     "input_data": "input",
     "llm_transform": "model transform",
-    "python_row_function": "dangerously run code",
-    "python_frame_function": "dangerously run code on the table",
+    "python_row_function": "run unsandboxed code",
+    "python_frame_function": "run unsandboxed code on the table",
     "starlark_row_function": "run code",
     "starlark_filter_rows": "filter rows",
     "enrich": "enrich",
@@ -73,10 +76,11 @@ TYPE_LABEL = {
     "human_review_queue": "review queue",
     "report": "report",
     "union": "union",
-    "filter_rows": "dangerously filter rows",
+    "filter_rows": "filter rows with unsandboxed code",
     "explode": "explode",
     "dedupe": "dedupe",
     "sort_rank": "sort and rank",
+    "read_pages": "read pages",
 }
 
 

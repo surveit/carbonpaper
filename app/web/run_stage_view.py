@@ -10,6 +10,7 @@ from app.models.run_manifest import RunKind
 from app.core.json_types import JsonDict
 from app.models import AbstractStage, WorkflowStage
 from app.models.schema import StageId
+from app.models.stages.llm_transform import LLMTransformStage
 from app.services import run as run_service
 from app.services.loader import resolve_function_code
 from app.services.workspace import resolve_run_dir
@@ -18,6 +19,7 @@ from app.web.column_order import order_preview_columns
 from app.web.config import EVENT_TAIL
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH
 from app.web.eval_coverage import EvalCoverage, find_eval_coverages
+from app.web.judgment_view import ReplayedJudgments, read_replayed_judgments
 from app.web.loading import (
     PREVIEW_ROWS_SHOWN, build_llm_example, load_output_preview, load_output_rows_at)
 from app.web.panel_links import AppPanelLinks
@@ -76,6 +78,8 @@ class RunStagePanel:
     links: AppPanelLinks
     queue_link: str | None
     scope: TraceScope | None
+    # Set only where this run called no model and replayed rows: its strip names their judgments.
+    replayed: ReplayedJudgments | None
     # The one pane the panel opens, where the caller named one; "" draws the strip.
     only_pane: str = ""
     event_tail: int = EVENT_TAIL
@@ -141,8 +145,20 @@ def build_run_stage_panel(
         links=links,
         queue_link=find_queue_link(links, project_id, run_id, stage_id),
         scope=scope,
+        replayed=_read_replayed_judgments(project_id, run_id, stage_def, stage_record),
         only_pane=only_pane,
     )
+
+
+def _read_replayed_judgments(
+    project_id: str, run_id: str, stage_def: AbstractStage | None, stage_record: JsonDict,
+) -> ReplayedJudgments | None:
+    usage = stage_record.get("llm_usage") or {}
+    if not isinstance(stage_def, LLMTransformStage) or usage.get("calls"):
+        return None
+    if not stage_record.get("cached_rows"):
+        return None
+    return read_replayed_judgments(project_id, run_id, stage_def.id)
 
 
 def _build_diff(pinned: run_service.RunStageDef, run_dir: Path,

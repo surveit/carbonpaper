@@ -237,6 +237,7 @@ tr.lin-opens:hover td{background:var(--hover)}
   line-height:1.5}
 .inroutes code{background:var(--sunk-deep);padding:0 4px;border-radius:4px;color:var(--fg)}
 .inpath{display:block;color:var(--muted);font-size:11px;margin-top:2px;word-break:break-all}
+.inorigin{display:block;font-size:11.5px;margin-top:4px;overflow-wrap:anywhere}
 .inmiss{color:var(--state-warn-ink);font-size:11px;margin-left:5px}
 .inline-note{color:var(--muted);font-size:12px;margin:8px 0 0}
 .inline-note code{background:var(--sunk-deep);padding:0 4px;border-radius:4px}
@@ -552,13 +553,20 @@ function fanInOf(n){
 // line stays inert — every other line opens the lineage of the cell it prints.
 function columnRow(f){
   const mark = {added:'+', changed:'~', dropped:'−', carried:''}[f.state];
-  const text = f.text === '' ? '<span class="lin-null">(empty)</span>' : esc(f.text);
+  const text = f.cites.length ? f.cites.map(spanCite).join('')
+    : f.text === '' ? '<span class="lin-null">(empty)</span>' : esc(f.text);
   const was = f.state === 'changed'
     ? `<span class="lin-was">${f.was === '' ? '<em>(empty)</em>' : esc(f.was)}</span>` : '';
   const opens = (OFFLINE || f.state === 'dropped') ? '' : ' lin-opens';
   return `<tr class="${f.state}${f.inert ? ' inert' : ''}${opens}" data-column="${esc(f.name)}">
     <td class="lin-f" title="${esc(f.name)}"><span class="lin-mark">${mark}</span>${esc(f.name)}</td>
     <td class="lin-v"><div class="lin-clip">${text}${was}</div></td></tr>`;
+}
+// A span cell (app/web/span_cells.py): the whole quote, then its page, linked where
+// the page exists here — the app's file page, or the packet's text of that page.
+function spanCite(c){
+  const label = c.href ? `<a href="${esc(c.href)}">${esc(c.label)}</a>` : esc(c.label);
+  return `<span class="span-cite"><q>${esc(c.quote)}</q> ${label}</span>`;
 }
 // What became of THIS row here, where neither the marks below nor `baseLine` say it:
 // a row with no parent to compare against, and a row every cell of which survived.
@@ -607,7 +615,9 @@ function unparentedLine(n){
 // sits, and the stage's own number is what it became on the way in.
 function sourceTitle(n){
   if(!n.source_file) return `<span class="lin-sub">row ${n.row_number}</span>`;
-  const named = `<span class="lin-source"><code>${esc(n.source_file)}</code>`
+  const file = `<code>${esc(n.source_file)}</code>`;
+  const named = `<span class="lin-source">`
+    + (n.source_file_href ? `<a href="${n.source_file_href}">${file}</a>` : file)
     + ` row ${n.source_row_number}</span>`;
   if(n.source_row === n.row_ordinal) return named;
   return named + `<span class="lin-became has-tip" data-tip="${esc(becameWhy(n))}"`
@@ -684,6 +694,7 @@ document.querySelector('.lin-tabs').addEventListener('click', e => {
   if(e.target.dataset.tab){ tab = e.target.dataset.tab; render(); }
 });
 document.getElementById('pbody').addEventListener('click', e => {
+  if(e.target.closest('a')) return;  // a span cell's page link goes where it points
   // A clipped value hides part of itself, so the click that reveals it is not
   // yet the click that leaves the page.
   const clip = e.target.closest('.lin-clip.is-clipped');

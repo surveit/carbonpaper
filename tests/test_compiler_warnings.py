@@ -262,9 +262,8 @@ def test_the_warning_says_what_the_reader_loses_not_that_a_field_is_empty():
                  if w.kind == "unnamed_rows"]
     assert warning.severity == "error"
     assert warning.detail == (
-        "its rows are a new kind of thing and no `row_type_id` says what one of them "
-        "is, so nothing written about them — this stage's own description, a review "
-        "guide, a published figure — can name the thing"
+        "its rows are a new kind of thing, and without a `row_type_id` nothing written "
+        "about them can name it"
     )
 
 
@@ -289,13 +288,15 @@ def test_the_two_stages_that_answer_for_themselves_are_owed_no_word():
     assert _kinds(_report_stage()) == []
 
 
-def test_unnamed_rows_sorts_above_the_kinds_that_leave_words_unchecked():
+def test_an_error_sorts_above_every_warning():
     report = find_workflow_compiler_warnings([
+        _stage(stage_id="silent", summary=None),
+        _queue_stage(predicate=PREDICATE_NOT_WRITTEN),
         _llm_stage(stage_id="note", cache=False),
         _row_minting_stage("python_frame_function"),
     ])
     assert [w.kind for w in report.warnings] == [
-        "unnamed_rows", "unexemplified", "nondeterministic"]
+        "unnamed_rows", "undescribed", "unsaid_test", "unexemplified", "nondeterministic"]
 
 
 # ── the workflow-level gate ──────────────────────────────────────────────────

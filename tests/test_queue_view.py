@@ -136,7 +136,8 @@ def test_the_context_table_omits_the_columns_under_review():
     snapshot = pd.DataFrame({"id": ["a"], "score": [2], "label": ["high"]})
 
     page = queue_view.build_queue_page("p", "r", stage, stage.stage.queue, snapshot,
-                                    fingerprints=None, drift=None, closed_note=None)
+                                    fingerprints=None, drift=None, closed_note=None,
+                                    filenames_by_sha256={})
 
     assert [column.name for column in page.context_columns] == ["id", "score"]
 
@@ -146,7 +147,8 @@ def test_declared_context_columns_are_the_ordered_subset_shown():
     snapshot = pd.DataFrame({"id": ["a"], "score": [2], "label": ["high"]})
 
     page = queue_view.build_queue_page("p", "r", stage, stage.stage.queue, snapshot,
-                                    fingerprints=None, drift=None, closed_note=None)
+                                    fingerprints=None, drift=None, closed_note=None,
+                                    filenames_by_sha256={})
 
     assert [column.name for column in page.context_columns] == ["score", "id"]
 
@@ -156,7 +158,8 @@ def test_an_empty_context_columns_list_shows_no_noneditable_columns():
     snapshot = pd.DataFrame({"id": ["a"], "score": [2], "label": ["high"]})
 
     page = queue_view.build_queue_page("p", "r", stage, stage.stage.queue, snapshot,
-                                    fingerprints=None, drift=None, closed_note=None)
+                                    fingerprints=None, drift=None, closed_note=None,
+                                    filenames_by_sha256={})
 
     assert page.context_columns == []
 

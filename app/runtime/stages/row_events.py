@@ -6,7 +6,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..run_log import ROW_ERROR, ROW_OK, ROW_START, SOURCE_CACHED, SOURCE_COMPUTED, RunLog
+from app.core.ids import ID
+
+from ..run_log import (
+    JUDGMENT_ID, ROW_ERROR, ROW_OK, ROW_START, SOURCE_CACHED, SOURCE_COMPUTED, RunLog,
+)
 
 
 def emit_row_start(log: RunLog | None, stage_id: str, index: int) -> None:
@@ -14,11 +18,16 @@ def emit_row_start(log: RunLog | None, stage_id: str, index: int) -> None:
         log.emit({"kind": ROW_START, "stage": stage_id, "row": index})
 
 
-def emit_row_outcome(log: RunLog | None, stage_id: str, index: int, error: Any) -> None:
+def emit_row_outcome(
+    log: RunLog | None, stage_id: str, index: int, error: Any, judgment_id: ID | None,
+) -> None:
     """An LLM mapper tags a failed row instead of raising, so `error` is how a failure reaches here."""
     if log is None:
         return
-    event = {"stage": stage_id, "row": index, "source": SOURCE_COMPUTED}
+    event = {
+        "stage": stage_id, "row": index, "source": SOURCE_COMPUTED,
+        **_name_judgment(judgment_id),
+    }
     if error is None:
         log.emit({"kind": ROW_OK, **event})
     else:
@@ -34,8 +43,16 @@ def emit_row_raised(log: RunLog | None, stage_id: str, index: int, exc: BaseExce
     })
 
 
-def emit_cached_row(log: RunLog | None, stage_id: str, index: int) -> None:
+def emit_cached_row(
+    log: RunLog | None, stage_id: str, index: int, judgment_id: ID | None,
+) -> None:
     if log is not None:
         log.emit({
             "kind": ROW_OK, "stage": stage_id, "row": index, "source": SOURCE_CACHED,
+            **_name_judgment(judgment_id),
         })
+
+
+def _name_judgment(judgment_id: ID | None) -> dict[str, str]:
+    """Absent, not null, where no model decided the row: most row-mapped stages call none."""
+    return {} if judgment_id is None else {JUDGMENT_ID: judgment_id}

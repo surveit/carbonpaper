@@ -167,9 +167,12 @@ class PythonFunction(StageConfig):
             "Inline Python defining `function` (default `transform`). Signature by stage "
             "type: python_row_function `def transform(row: dict) -> dict` (1 row in, 1 out; "
             "cannot reorder or fan out); python_frame_function "
-            "`def transform(df, ..., *, progress) -> DataFrame` (inputs positional in "
-            "declared order; it may declare the keyword-only progress callback, which "
-            "accepts completed and total); "
+            "`def transform(df, ..., *, lineage, progress) -> DataFrame` (inputs positional "
+            "in declared order; `lineage` is required, and every returned row needs "
+            "`lineage.built_from(output_row, input_id, input_row)`, "
+            "`lineage.contributed_by(output_row, input_id, input_row, columns=[...])` or "
+            "`lineage.originates(output_row)`; `progress` is optional, a callback accepting "
+            "completed and total); "
             "report `def transform(df, ..., output_dir, citation_provider) -> DataFrame` (writes "
             "artifact files into output_dir; the returned frame lists them). When the "
             "function meets an input it cannot handle, it refuses instead of "
@@ -268,10 +271,17 @@ STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
         required=["kind", "code"],
         optional=["function", "requirements", "summary"],
         notes=(
-            "The runtime calls `transform(*frames)`: one POSITIONAL parameter per declared "
-            "input, in `inputs` order — never by name, never a dict of frames. It receives no "
-            "output_dir and no citation_provider; writing files is the report's job. Return the output "
-            "DataFrame."
+            "The runtime calls `transform(*frames, lineage=...)`: one POSITIONAL parameter per "
+            "declared input, in `inputs` order — never by name, never a dict of frames — and "
+            "the lineage recorder KEYWORD-ONLY: `def transform(mills, claims, *, lineage)`. It "
+            "receives no output_dir and no citation_provider; writing files is the report's "
+            "job. Return the output DataFrame, and say for EVERY row of it where it came from: "
+            "`lineage.built_from(output_row, \"<input stage id>\", input_row)` for the input "
+            "row it was built from, `lineage.contributed_by(output_row, \"<input stage id>\", "
+            "input_row, columns=[...])` for a row that fed it without being that one, or "
+            "`lineage.originates(output_row)` for a row no input row produced. Ordinals are "
+            "0-based positions in the frames as received. A row with none of the three fails "
+            "the stage, as does a function that does not declare `lineage`."
         ),
     ),
 }

@@ -263,8 +263,8 @@ def test_subtract_nested_field_spec_difference_throws():
 def test_spec_column_fields_read_off_the_model():
     """So a newly added Column field is compared by subtract instead of being silently ignored."""
     from app.models import schema as sch
-    prose = {"name", "description", "source"}
-    assert set(sch._SPEC_COLUMN_FIELDS) == set(m.Column.model_fields) - prose
+    not_spec = {"name", "description", "source", "quoted_from"}
+    assert set(sch._SPEC_COLUMN_FIELDS) == set(m.Column.model_fields) - not_spec
 
 
 # ── TableSchema.column_for_name ───────────────────────────────────────────────

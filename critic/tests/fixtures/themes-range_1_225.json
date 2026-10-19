@@ -1,0 +1,11 @@
+{
+  "_notes": {
+    "author_inferred": "surveit is both the user and the account the coding agent posts under. 'human' = the user's own review voice (short, informal, lowercase, typos). 'agent' = text the agent posted as surveit: thread replies ('Done in <sha>'), review-guide notes ('**Decision:** ...'), status notes ('Closing as stale'). Theme stats count human rows only.",
+    "gateable": "deterministic = a string, regex, AST, path, or diff-size check could catch it. judge = an LLM reading the diff (with the repo at that commit) could catch it. none = needs the user's intent, product direction, or taste. Agent rows carry null.",
+    "severity": "blocking = the user rejects the change or calls it wrong/gross in strong terms, or it breaks a cardinal rule (fabrication, broad except, layering). should = a clear correction the PR should adopt. nit = optional, minor, or a musing. Agent rows carry null.",
+    "rule": "Paraphrase of the rule the user applies, at most 12 words. Empty for continuation fragments, pure clarifying questions, and sign-offs."
+  },
+  "naming": "A name is inaccurate, vague, abbreviated, not verb-led for a function, or does not say what the value holds.",
+  "layering": "Import or dependency direction is wrong: infra knows app concepts, tools touch disk, runtime reads files it should receive.",
+  "praise": "Explicit positive evaluation ('oh nice')."
+}

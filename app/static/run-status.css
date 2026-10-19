@@ -164,6 +164,18 @@ table.data-preview td.cell-url {
     word-break: break-all;
 }
 table.data-preview td.cell-url a { color: var(--accent); }
+/* Span cells (_data_cell.html span_cites): wrapped like a URL cell, so the page link
+   after a long quote is never clipped off the end. */
+table.data-preview td.cell-span {
+    white-space: normal;
+    min-width: 240px;
+    max-width: 480px;
+    overflow: visible;
+    text-overflow: clip;
+}
+.span-cite { display: block; }
+.span-cite + .span-cite { margin-top: 4px; }
+.span-cite a { color: var(--accent); white-space: nowrap; }
 /* Clipped text cells: hover shows the full value (title attr), click expands
    the cell in place so long text wraps instead of being cut off. */
 table.data-preview td.cell-clip { cursor: zoom-in; }

@@ -10,12 +10,12 @@
     },
     {
       "title": "Find the rows that mention AI",
-      "prose": "A search for six terms in each filing's own words \u2014 artificial intelligence, AI, machine learning, large language model, deepfake, algorithmic. A net, not a judgment: it also catches algorithmic trading and airline codes on purpose.",
+      "prose": "A search for six terms in each filing's own words \u2014 artificial intelligence, AI, machine learning, large language model, deepfake, algorithmic. Wide on purpose: it also catches algorithmic trading and airline codes, for the next step to judge.",
       "stage_ids": [
         "find_ai_mentions",
         "keep_ai_candidates"
       ],
-      "data_description": "Every filing whose own words used one of the six terms; the rest carry no figure forward."
+      "data_description": "Every filing whose own words used one of the six terms."
     },
     {
       "title": "Judge whether the filing is really about AI",
@@ -59,7 +59,7 @@
     },
     {
       "title": "Set the paid filings apart",
-      "prose": "The filings where a client paid an outside firm \u2014 the ones behind the headline figure.",
+      "prose": "The filings where a client paid an outside firm: the ones behind the headline result.",
       "stage_ids": [
         "select_external_filings"
       ],
@@ -67,7 +67,7 @@
     },
     {
       "title": "Send every paid filing to review",
-      "prose": "The model's reading is only a proposal: every filing behind the headline figure waits here for a reviewer to confirm or overturn it, largest reported spend first. The run records the name each decision was made under.",
+      "prose": "The model's reading is only a proposal: every filing behind the headline result waits here for a reviewer to confirm or overturn it, largest reported spend first. The run records the name each decision was made under.",
       "stage_ids": [
         "review_ai_spend"
       ],
@@ -75,20 +75,20 @@
     },
     {
       "title": "Drop what a reviewer did not confirm",
-      "prose": "A filing the reviewer overturned leaves here; its money enters no published figure.",
+      "prose": "A filing the reviewer overturned leaves here; its money enters no result.",
       "stage_ids": [
         "confirm_ai_spend"
       ],
       "data_description": "The paid AI filings a reviewer confirmed."
     },
     {
-      "title": "Publish the headline figures",
-      "prose": "What clients paid outside firms to lobby on AI: the total, the filings behind it, and the paying clients \u2014 plus the same total split by client. Open it under Published.",
+      "title": "Total the confirmed paid filings",
+      "prose": "What clients paid outside firms to lobby on AI: the total, the filings behind it, and the paying clients \u2014 plus the same total split by client. The total is the headline result.",
       "stage_ids": [
         "ai_spend_by_client",
         "ai_spend_totals"
       ],
-      "data_description": "The confirmed paid filings, summed as the published totals."
+      "data_description": "The confirmed paid filings, summed in total and by client."
     },
     {
       "title": "Total what organisations reported for their own AI lobbying",
@@ -101,7 +101,7 @@
     },
     {
       "title": "Size the corpus this question was asked of",
-      "prose": "How many filings the two exports carried in total, before any prior step narrowed them \u2014 the base rate the AI figures should be read against.",
+      "prose": "How many filings the two exports carried in total, before any prior step narrowed them \u2014 the base rate the AI results should be read against.",
       "stage_ids": [
         "corpus_totals"
       ],

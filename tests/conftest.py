@@ -14,8 +14,11 @@ import pyarrow as pa
 import pytest
 
 from app.models.run_manifest import RunKind
+from app.core.agent.usage import LlmUsage
 from app.core.errors import LLMError
+from app.core.judgments import JudgmentDraft
 from app.core.stage_cache import ReadOnlyStageCache
+from app.core.timestamp_ids import now_iso
 from app.models import Stage, TableSchema, Workflow, WorkflowStage, WorkflowStageInput
 from app.models.stages.signature import promised_output_schema, transform_input_schemas
 from app.models.stage_contribution import StageContribution
@@ -65,6 +68,18 @@ def resumed_stages(project_dir: Path, run_id: str) -> tuple[Workflow, str]:
 
 def _load_version_workflow(project_dir: Path, version_id: str) -> Workflow:
     return Workflow(stages=load_version_stages(project_dir.name, version_id))
+
+
+# What a stubbed `call_llm` names as its model: a script answered, not a model.
+SCRIPTED_MODEL = "scripted"
+
+
+def script_judgment(reply: dict[str, Any], usage: LlmUsage = LlmUsage()) -> JudgmentDraft:
+    """What `call_llm` returns, for a stub standing in for the model."""
+    return JudgmentDraft(
+        system_prompt="", task="", model=SCRIPTED_MODEL, reply=reply, usage=usage,
+        decided_at=now_iso(),
+    )
 
 
 def source_stage(stage_id: str, columns: list[dict[str, object]]) -> dict[str, object]:

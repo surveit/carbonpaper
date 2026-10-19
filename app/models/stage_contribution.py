@@ -35,3 +35,5 @@ class StageContribution(BaseModel):
     # Non-fatal facts about how the stage ran, appended to the record's `notes`.
     # Never stage data.
     notes: list[str] = []
+    # Shown beside the stage's output as warning issues; the stage still finishes.
+    warnings: list[str] = []

@@ -10,7 +10,14 @@ from pydantic import AliasChoices, Field, model_validator
 
 from app.core.llm.options import LLMModel
 from app.core.prompt_template import find_template_fields
-from app.models.schema import StageConfig, TableSchema
+from app.models.schema import (
+    LIST_SPAN_COLUMN_TYPE,
+    SPAN_COLUMN_TYPE,
+    Column,
+    StageConfig,
+    TableSchema,
+    holds_spans,
+)
 from app.models.stages.stage_base import AbstractStage, StageInput, StageType
 from app.models.stages.shared import COLUMN_ISSUE, resolve_input_columns
 from app.models.stages.stage_type_spec import StageTypeSpec
@@ -197,7 +204,39 @@ def find_llm_signature_issues(stage: "LLMTransformStage") -> list[str]:
     if not signature.adds:
         issues.append(f"stage '{stage.id}': the signature adds no columns beyond the "
                       f"input, so the model is asked for nothing")
+    issues.extend(_find_quoted_from_issues(stage))
     return issues
+
+
+def _find_quoted_from_issues(stage: "LLMTransformStage") -> list[str]:
+    anchor_id = stage.inputs[0].id
+    span_columns_read = {
+        column.name
+        for entry in stage.signature.reads
+        if entry.input == anchor_id
+        for column in entry.columns
+        if column.type in (SPAN_COLUMN_TYPE, LIST_SPAN_COLUMN_TYPE)
+    }
+    return [
+        f"stage '{stage.id}': {issue}"
+        for column in stage.signature.adds
+        if (issue := _find_quoted_from_issue(column, span_columns_read)) is not None
+    ]
+
+
+def _find_quoted_from_issue(column: Column, span_columns_read: set[str]) -> str | None:
+    if column.type != SPAN_COLUMN_TYPE:
+        if not holds_spans(column):
+            return None
+        return (f"`{column.name}` holds spans inside a `{column.type}` column, but the runtime "
+                f"mints only a column of type `span`")
+    if column.quoted_from is None:
+        return (f"span column `{column.name}` names no quoted_from, the input span column "
+                f"whose text it quotes")
+    if column.quoted_from not in span_columns_read:
+        return (f"span column `{column.name}` is quoted from `{column.quoted_from}`, which the "
+                f"signature does not read as a span or a list of spans")
+    return None
 
 
 def find_llm_prompt_column_issues(

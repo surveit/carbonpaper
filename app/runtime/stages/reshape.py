@@ -1,8 +1,4 @@
-"""Handlers for the three declared reshapes — explode, dedupe, sort_rank.
-Each reports the per-row provenance a python_frame_function doing the same work
-cannot, so `app.runtime.trace` crosses the stage. Arrow throughout: none of them
-hands a frame to authored code, so none needs pandas.
-"""
+"""The explode, dedupe and sort_rank handlers: Arrow only, no authored code, lineage worked out here."""
 from __future__ import annotations
 
 from typing import Sequence

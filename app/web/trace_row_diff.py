@@ -11,6 +11,8 @@ from app.web.column_order import (
     order_columns_by_group,
 )
 from app.web.diff_state import CellDiffState
+from app.web.panel_links import PanelLinks
+from app.web.span_cells import SpanCellText, render_span_cell
 from app.core.figure_text import render_figure
 
 
@@ -67,11 +69,12 @@ def build_row_diff(
     )
 
 
-def row_diff_to_dict(diff: RowDiff) -> dict[str, Any]:
+def row_diff_to_dict(diff: RowDiff, links: PanelLinks) -> dict[str, Any]:
     return {
         "columns": [
             {"name": column.name, "state": str(column.state.value),
-             "text": column.text, "was": column.was, "inert": column.inert}
+             "text": column.text, "was": column.was, "inert": column.inert,
+             "cites": _list_cites(column.text, links)}
             for column in diff.columns
         ],
         "added": diff.added,
@@ -81,7 +84,18 @@ def row_diff_to_dict(diff: RowDiff) -> dict[str, Any]:
 
 
 def render_cell(value: Any) -> str:
-    return "" if value is None else render_figure(value)
+    if value is None:
+        return ""
+    span_text = render_span_cell(value)
+    return render_figure(value) if span_text is None else span_text
+
+
+def _list_cites(text: str, links: PanelLinks) -> list[dict[str, str | None]]:
+    """What the lineage page's script links a span cell by; empty for any other cell."""
+    if not isinstance(text, SpanCellText):
+        return []
+    return [{"quote": cite.span.quote, "label": cite.label, "href": links.source_page(cite.span)}
+            for cite in text.cites]
 
 
 def _compare_column(

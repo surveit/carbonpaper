@@ -44,7 +44,7 @@ def _build_enrich_on_k(*, join):
 
 # ── column types ─────────────────────────────────────────────────────────────
 @pytest.mark.parametrize("t", ["str", "int", "float", "bool", "datetime", "date",
-                                "json", "list[str]", "list[list[int]]"])
+                                "json", "span", "list[str]", "list[list[int]]", "list[span]"])
 def test_column_type_valid(t):
     kw = {"name": "c", "type": t, "nullable": True}
     if t == "json":
@@ -129,6 +129,48 @@ def test_llm_transform_rejects_output_that_adds_no_columns():
                 "reads": [{"input": "a", "columns": _PK_ID_SCHEMA["columns"]}],
             },
             llm={"prompt_template": "do {id}"}))
+
+
+def _build_quoting_stage(page_type: str = "span", **basis: object) -> dict[str, object]:
+    return S(id="extract", type="llm_transform", inputs=[{"id": "pages"}],
+             signature={"form": "extends",
+                        "reads": [{"input": "pages",
+                                   "columns": [{"name": "page", "type": page_type,
+                                                "nullable": False},
+                                               {"name": "text", "type": "str",
+                                                "nullable": False}]}],
+                        "adds": [{"name": "basis", "type": "span", "nullable": True,
+                                  **basis}]},
+             llm={"prompt_template": "Quote the ruling from {page} ({text})"})
+
+
+@pytest.mark.parametrize("page_type", ["span", "list[span]"])
+def test_llm_transform_accepts_a_span_quoted_from_a_span_or_spans_it_reads(page_type):
+    stage = m.parse_stage(_build_quoting_stage(page_type, quoted_from="page"))
+    assert stage.signature.adds[0].quoted_from == "page"
+
+
+@pytest.mark.parametrize("added", [
+    {"name": "basis", "type": "list[span]", "nullable": True},
+    {"name": "event", "type": "json", "nullable": True, "fields": [
+        {"name": "basis", "type": "span", "nullable": True, "quoted_from": "page"}]},
+])
+def test_llm_transform_refuses_spans_it_would_add_inside_a_list_or_json(added):
+    spec = _build_quoting_stage()
+    spec["signature"]["adds"] = [added]
+    with pytest.raises(ValidationError, match="the runtime mints only a column of type `span`"):
+        m.parse_stage(spec)
+
+
+def test_llm_transform_refuses_a_span_that_names_no_quoted_from():
+    with pytest.raises(ValidationError, match="span column `basis` names no quoted_from"):
+        m.parse_stage(_build_quoting_stage())
+
+
+@pytest.mark.parametrize("quoted_from", ["text", "headline"])
+def test_llm_transform_refuses_a_span_quoted_from_what_it_does_not_read_as_a_span(quoted_from):
+    with pytest.raises(ValidationError, match="does not read as a span"):
+        m.parse_stage(_build_quoting_stage(quoted_from=quoted_from))
 
 
 def test_report_requires_the_function_block_it_actually_runs():

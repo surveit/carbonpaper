@@ -40,6 +40,11 @@ through `parse_stage`:
 `app/runtime/handlers.py`, `runner.py`, `preview.py`, and the web layer all consume
 the typed `Stage` objects this loader returns.
 
+### Connector kinds
+
+`file` is the kernel's one connector kind. Every other kind is a pack's, registered with
+the code that acquires its files ([packs.md](packs.md)).
+
 ## Storage — two layers, and nothing else
 
 A project's state lives in exactly two places:
@@ -48,13 +53,15 @@ A project's state lives in exactly two places:
   keyed `(collection, id)`. Every stored record is a `PersistedModel`: the
   methodology, each draft, each `workflow_version`, a run's record and its
   chunked event log, the review-queue fingerprints, the review decisions, the
-  terms, and the uploaded-file index.
+  model judgments, the terms, and the stored-file index (uploads and fetched sources).
 - **Frames** (`app/core/frames.py`), the parquet files a run reads and writes.
 
 `tests/arch/test_persistence_is_frames_and_the_store.py` holds this: nothing under
-`app/` writes a file except frames, an export the user downloads, and a file the
-user uploaded. What is left on disk under a project is `code/`, `data/` and
-`runs/<id>/{outputs, artifacts, queue}` — frames and the files around them.
+`app/` writes a file except frames, an export the user downloads (the review packet,
+whose archive is listed in [run-and-review-ui.md](run-and-review-ui.md)), and a file the
+user uploaded or a connector fetched. What is left on disk under a project is `code/`,
+`data/` and `runs/<id>/{outputs, sources, artifacts, queue}` — frames and the files
+around them.
 
 ### Where a record is declared
 
@@ -68,7 +75,7 @@ Three modules, not one, sit under that, and two of them are protected:
 
 | Module | Holds | Who may import it |
 |---|---|---|
-| `app/core/record.py` | `PersistedModel`, `PersistenceScope` | `app.core`, `app.models.records`, `app.runtime` |
+| `app/core/record.py` | `PersistedModel`, `PersistenceScope` | `app.core`, `app.models.records` |
 | `app/core/persistence.py` | `StoreProtocol`, `get_store`, `configure_store` | `app.core.record`, `app.core.store_config`, `app.core.sqlite_store` |
 | `app/core/json_types.py` | `JsonDict`, `JsonScalar` | anyone |
 
@@ -76,8 +83,9 @@ Declaring a record means importing the base, so the first whitelist is the list 
 places a stored row's shape may be written down. Holding the handle means being able to
 write any collection under any id with no record class in the way, so the second
 whitelist closes that off: **under `app/`, a record class is the only way to reach
-storage.** Naming the shape of a payload is neither of those acts, which is why the
-JSON aliases sit apart and stay open.
+storage.** A raw payload a reader must tolerate comes off the record too, through
+`load_raw`, `load_raw_or_none` and `list_raw`. Naming the shape of a payload is neither of
+those acts, which is why the JSON aliases sit apart and stay open.
 
 Tests are outside both contracts — import-linter's root package is `app` — so a test may
 still reach `get_store()` directly to arrange a fixture or assert on the stored bytes.
@@ -111,8 +119,22 @@ call `.save()` per writing module rather than per declaration site.
 `app.core` is the other, for records that `app/models` sits above in the layers
 contract, where a declaration in `app/models` would be unreachable from the module that
 needs it: `ProjectFile` (`app/core/files.py`), `StageCacheEntry`
-(`app/core/stage_cache.py`), `AgentSession` (`app/core/agent/store.py`) and
+(`app/core/stage_cache.py`), `Judgment` (`app/core/judgments.py`, written only by
+`StageCache.record_judgment`), `AgentSession` (`app/core/agent/store.py`) and
 `StoredFileShape` (`app/core/file_shape.py`).
+
+### A record's id is opaque and frozen
+
+A `PersistedModel`'s `id` defaults to `uuid4().hex` and is never built from the record's own
+data. A sha256, a filename, a name someone typed or a fingerprint in the id makes the id move
+when the value does: the record then has two identities that must agree, nothing checks that
+they do, and re-keying it means deleting and re-writing the row rather than editing a field.
+The real key goes in a field, which is what a lookup filters on: `find()` selects on stored
+fields, so a scope has no reason to ride in the id. `StageCacheEntry` is the one deliberate
+exception: a cache entry IS its content hash, so its id is built from the fingerprints it is
+looked up by. `id` carries `frozen=True`, so reassigning it on a loaded record raises rather
+than re-keying the row. `app/_arch_tests/test_record_ids_are_opaque.py` holds the construction
+sites; its `_GRANDFATHERED` set names the older ones that still pass an `id`, and may only shrink.
 
 ### The stage spec-dict shape
 
@@ -132,6 +154,14 @@ all, and making the field required would fail to load every one of them. `None` 
 not a missing label — it means the project id is still the only name it has, which
 `Project.label()` reports.
 
+`WorkflowVersion.method` is the second. `create_version_from_stages` copies the project's
+row types, verbs and methodology onto each version it saves, so a run's readers get the ones
+it was built from. A version saved before then has no `method`. Each reader of one — the
+review packet, a claim's evidence, the version page — says so, and shows none of the
+project's current text. The three sit in one `Method` because `DUMP_OPTS` drops a `None`: a
+flat `methodology` field could not tell "the project had none" from "the version kept
+nothing".
+
 ## Migrations replay, so every revision must be a no-op at head
 
 `./start` runs `alembic upgrade head` on boot. A store created by
@@ -147,7 +177,7 @@ rewriting it, since a rewrite also re-stamps `schema_version` and walks a record
 backwards to the version that revision wrote.
 
 `tests/test_migration_replay.py` holds it. The store it upgrades is seeded through the
-same service calls the app uses — `create_project`, `add_stages`,
+same service calls the app uses — `create_project`, `write_terms`, `add_stages`,
 `drafts.save_version`, `save_upload` — so the documents under test are whatever
 today's models write, and a model change moves the fixture with it. After
 `upgrade head` every document must be byte-identical, `schema_version` included, the

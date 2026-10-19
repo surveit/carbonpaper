@@ -17,6 +17,14 @@ class RowOutOfRange(ValueError):
     pass
 
 
+class PageOutOfRange(ValueError):
+    pass
+
+
+class UnsupportedTextFormat(ValueError):
+    pass
+
+
 class ContributorNotInFanIn(ValueError):
     """A trace was told to follow a contributor the run's lineage does not record."""
 
@@ -39,6 +47,42 @@ class ClaimReviewIsImmutable(ValueError):
 
 class CitationMismatch(ValueError):
     """A report stage cited a cell for a value that cell does not hold."""
+
+
+class QuoteNotInText(ValueError):
+    """A quote to narrow a span to is not in the span's own text, exactly as written."""
+
+
+class QuoteAmbiguous(ValueError):
+    """A quote to narrow a span to appears more than once in it, so no one address holds it."""
+
+
+class QuoteNotAtAddress(ValueError):
+    """The text at a span's address in its file is not its quote, prefix or suffix."""
+
+
+class QuoteRefused(ValueError):
+    """A model's quote, refused: the message names file and page, `correction` is for the model."""
+
+    def __init__(self, message: str, correction: str) -> None:
+        super().__init__(message)
+        self.correction = correction
+
+
+class SourceNotRead(ValueError):
+    """A span or a source row names a file by a sha256 the run never read."""
+
+
+class SourceIdMismatch(ValueError):
+    """A span or a source row names a source_id other than the file id its run read."""
+
+
+class SourceChanged(ValueError):
+    """A file a run read no longer hashes to the sha256 the run read it at."""
+
+
+class LocatorKindUnreadable(ValueError):
+    """A span's locator kind names no page of a file, so its quote cannot be read back."""
 
 
 class ColumnNotInFrame(ValueError):
@@ -144,6 +188,18 @@ class NoRowsToSelectFrom(Exception):
 
 class FileNotStoredError(Exception):
     """A file id the project has no stored bytes for."""
+
+
+class SourceUnavailable(Exception):
+    """A connector cannot reach a file it was asked for. The run is refused, and nothing is guessed."""
+
+
+class MirrorDisagrees(SourceUnavailable):
+    """A mirrored file does not hash to what its mirror recorded, so it is not the bytes fetched."""
+
+    def __init__(self, *, name: str, digest: str, recorded: str, origin_url: str) -> None:
+        super().__init__(
+            f"{name} hashes to {digest}, but its mirror recorded {recorded} for {origin_url}")
 
 
 class FileOverCeiling(Exception):

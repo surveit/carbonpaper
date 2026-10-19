@@ -8,15 +8,18 @@ from io import BytesIO
 
 import pytest
 
+from app.core.agent.usage import LlmUsage
+from app.core.judgments import Judgment, JudgmentDraft
 from app.core.stage_cache import CACHE_KEY_VERSION, StageCacheEntry
 from app.models import Column, StageType
 from app.models.stages.input_data import Connector, ConnectorKind, InputDataStage, FileConnectorParams, FileFormat
 from app.models.stages.signature import ReplacesSignature
 from app.services import loader, project
 from stage_seed import set_parsed_stages
+from app.services.errors import CacheExportRefused
 from app.services.stage_cache_transfer import (
     CacheArchiveRejected, StageImportCount, count_cached_entries, export_stage_cache,
-    import_stage_cache,
+    import_stage_cache, validate_cache_archive,
 )
 
 _SOURCE = "20260819T124525.966743"
@@ -31,7 +34,7 @@ def _record(project_id: str, *, stage_fingerprint: str, input_fingerprint: str, 
         input_fingerprint=input_fingerprint,
         input_row={"comment": "Diese Klimakleber sind eine Plage"},
         output_row={"is_abusive": verdict, "category": 9},
-        branches=["classify/0:if"],
+        branches=["classify/0:if"], judgment_id=None,
     )
 
 
@@ -50,13 +53,99 @@ def test_export_then_import_moves_entries_under_the_destination_project():
     assert moved.project == "destination"
 
 
+def _record_judged_entry() -> Judgment:
+    cache = StageCacheEntry.read_write()
+    judgment = cache.record_judgment(
+        project_id=_SOURCE, run_id="R1", stage_id=_STAGE, input_fingerprint="row_1",
+        input_row={"comment": "Diese Klimakleber sind eine Plage"},
+        draft=JudgmentDraft(system_prompt="Classify the comment.", task="Diese Klimakleber",
+                            model="claude-opus-5", reply={"is_abusive": True},
+                            usage=LlmUsage(calls=1), decided_at="2026-10-04T10:00:00"))
+    cache.record(
+        project_id=_SOURCE, stage_id=_STAGE, stage_fingerprint="fp_a", input_fingerprint="row_1",
+        input_row={"comment": "Diese Klimakleber sind eine Plage"},
+        output_row={"is_abusive": True}, branches=None, judgment_id=judgment.id)
+    return judgment
+
+
+def _read_moved_judgment(project_id: str) -> Judgment:
+    moved = StageCacheEntry.read_only().get(project_id, _STAGE, "fp_a", "row_1")
+    assert moved is not None and moved.judgment_id is not None
+    judgment = Judgment.read_only().get(moved.judgment_id)
+    assert judgment is not None
+    return judgment
+
+
+def test_an_import_carries_the_judgment_an_entry_names_into_the_destination():
+    judgment = _record_judged_entry()
+
+    report = import_stage_cache(export_stage_cache(_SOURCE), "destination")
+
+    moved = _read_moved_judgment("destination")
+    assert report.judgments == 1
+    assert moved.id != judgment.id
+    kept = {"id", "created_at", "updated_at", "project_id"}
+    assert (moved.project_id, moved.model_dump(exclude=kept)) == (
+        "destination", judgment.model_dump(exclude=kept))
+
+
+def test_one_archive_imported_into_two_projects_leaves_each_its_own_judgment():
+    _record_judged_entry()
+    archive = export_stage_cache(_SOURCE)
+
+    import_stage_cache(archive, "first")
+    import_stage_cache(archive, "second")
+
+    assert _read_moved_judgment("first").project_id == "first"
+    assert _read_moved_judgment("second").project_id == "second"
+
+
+def test_an_entry_already_stored_brings_no_judgment_with_it():
+    _record_judged_entry()
+    archive = export_stage_cache(_SOURCE)
+    import_stage_cache(archive, "destination")
+
+    report = import_stage_cache(archive, "destination")
+
+    assert (report.written, report.judgments) == (0, 0)
+    assert len(Judgment.find(project_id="destination")) == 1
+
+
+def _drop_member(archive: bytes, member: str) -> bytes:
+    rebuilt = BytesIO()
+    with zipfile.ZipFile(BytesIO(archive)) as source, zipfile.ZipFile(rebuilt, "w") as target:
+        for name in source.namelist():
+            if name != member:
+                target.writestr(name, source.read(name))
+    return rebuilt.getvalue()
+
+
+def test_an_archive_missing_a_judgment_its_entries_name_is_refused_before_any_write():
+    _record_judged_entry()
+    archive = _drop_member(export_stage_cache(_SOURCE), "judgments.jsonl")
+
+    with pytest.raises(CacheArchiveRejected, match="name 1 judgment"):
+        validate_cache_archive(archive)
+    with pytest.raises(CacheArchiveRejected, match="name 1 judgment"):
+        import_stage_cache(archive, "destination")
+    assert count_cached_entries("destination") == 0
+
+
+def test_an_export_refuses_an_entry_naming_a_judgment_the_store_lacks():
+    judgment = _record_judged_entry()
+    Judgment.delete(judgment.id)
+
+    with pytest.raises(CacheExportRefused, match=f"names judgment {judgment.id}"):
+        export_stage_cache(_SOURCE)
+
+
 def test_a_row_carrying_a_unicode_line_separator_survives_the_round_trip():
     """U+2028 is a line break to str.splitlines but not to json.dumps, so it splits a record."""
     StageCacheEntry.read_write().record(
         project_id=_SOURCE, stage_id=_STAGE, stage_fingerprint="fp_a",
         input_fingerprint="row_1",
         input_row={"specific_issues": "Issues related to AI.\u2028Trade promotion."},
-        output_row={"is_abusive": False, "category": 1}, branches=[],
+        output_row={"is_abusive": False, "category": 1}, branches=[], judgment_id=None,
     )
 
     report = import_stage_cache(export_stage_cache(_SOURCE), "destination")
@@ -184,7 +273,7 @@ def test_entries_matching_a_live_stage_definition_count_as_reachable(destination
     StageCacheEntry.read_write().record(
         project_id=_SOURCE, stage_id=stage_id, stage_fingerprint=fingerprint,
         input_fingerprint="row_1", input_row={"x": 1}, output_row={"y": 2},
-        branches=None,
+        branches=None, judgment_id=None,
     )
 
     report = import_stage_cache(export_stage_cache(_SOURCE), destination_project)
@@ -198,7 +287,7 @@ def test_entries_from_an_edited_stage_import_but_are_not_reachable(destination_p
     StageCacheEntry.read_write().record(
         project_id=_SOURCE, stage_id=stage_id, stage_fingerprint="fingerprint_from_an_older_edit",
         input_fingerprint="row_1", input_row={"x": 1}, output_row={"y": 2},
-        branches=None,
+        branches=None, judgment_id=None,
     )
 
     report = import_stage_cache(export_stage_cache(_SOURCE), destination_project)

@@ -89,3 +89,13 @@ def test_a_short_vocabulary_stays_inline_with_no_fold_to_click():
 
     assert "<details" not in html
     assert "values<" not in html
+
+
+# ─── A span a model quotes names the column it quotes from ───────────────────
+
+
+def test_a_quoted_span_column_says_whose_words_it_quotes():
+    html = _render(Column(name="basis", type="span", nullable=True, quoted_from="page",
+                          description="Where the court rules."))
+
+    assert "A verbatim quote from <code>page</code>. Where the court rules." in html

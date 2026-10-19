@@ -87,7 +87,7 @@ def _capture(monkeypatch):
     class StubAgent:
         def __init__(self, **kw):
             seen.update(kw)
-            self._last_usage = None
+            self.last_usage = None
 
         async def run(self, emit=None):
             return Reply(answer="ok")

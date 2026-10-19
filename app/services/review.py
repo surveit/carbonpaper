@@ -66,6 +66,7 @@ def record_decision(
         ),
         # A human decided this row; no code ran, so there is no branch to replay.
         branches=None,
+        judgment_id=None,
     )
 
 

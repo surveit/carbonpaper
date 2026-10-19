@@ -27,7 +27,11 @@ class BranchRecordingError(RuntimeError):
 
 
 class MissingLineage(RuntimeError):
-    """A stage owed a lineage sidecar by its type's contract and wrote none."""
+    """A stage owed lineage for its rows by its type's contract and did not record it for every one."""
+
+
+class JudgmentUnrecorded(RuntimeError):
+    """A row a model decided came back with no JudgmentDraft for the ledger."""
 
 
 class NotALoadStage(RuntimeError):

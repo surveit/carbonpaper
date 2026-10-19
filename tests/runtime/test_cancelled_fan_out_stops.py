@@ -14,6 +14,7 @@ from typing import Any
 import pandas as pd
 import pytest
 
+from app.core.judgments import JudgmentDraft
 from app.core.stage_cache import ReadOnlyStageCache
 from app.models import Stage, parse_stage
 from app.models.stage import StageType
@@ -23,7 +24,7 @@ from app.runtime.errors import RunCancelled
 from app.runtime.stages import HANDLERS
 from app.runtime.stages import execution
 from app.runtime.stages import llm_transform as lt
-from conftest import as_inputs, make_run_context, place_stage
+from conftest import as_inputs, make_run_context, place_stage, script_judgment
 
 PROJECT = "cancelled-fan-out"
 _ROWS = 8
@@ -82,11 +83,11 @@ def _hold_until_the_gate_opens(gate: threading.Event) -> None:
         raise AssertionError("the pool never dropped its queue — the fan-out did not unwind")
 
 
-def _reply_to(kwargs: dict[str, Any]) -> dict[str, Any]:
+def _reply_to(kwargs: dict[str, Any]) -> JudgmentDraft:
     if "task" in kwargs:
         k = kwargs["task"].count("### item ")
-        return {"results": [{"row_number": i, "label": f"L{i}"} for i in range(k)]}
-    return {"label": "L"}
+        return script_judgment({"results": [{"row_number": i, "label": f"L{i}"} for i in range(k)]})
+    return script_judgment({"label": "L"})
 
 
 @pytest.mark.parametrize("batch_size,seam", [(1, "call_llm"), (2, "call_llm_batch")],
@@ -95,7 +96,7 @@ def test_a_cancel_stops_the_work_still_queued(monkeypatch, gate, batch_size, sea
     calls = {"n": 0}
     counting = threading.Lock()
 
-    def answer(*args: Any, **kwargs: Any) -> dict[str, Any]:
+    def answer(*args: Any, **kwargs: Any) -> JudgmentDraft:
         with counting:
             calls["n"] += 1
             first = calls["n"] == 1
@@ -124,7 +125,7 @@ def test_an_aborting_unit_stops_the_work_still_queued(monkeypatch, gate, batch_s
     calls = {"n": 0}
     counting = threading.Lock()
 
-    def answer(*args: Any, **kwargs: Any) -> dict[str, Any]:
+    def answer(*args: Any, **kwargs: Any) -> JudgmentDraft:
         with counting:
             calls["n"] += 1
             first = calls["n"] == 1

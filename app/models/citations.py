@@ -1,13 +1,17 @@
 """Where a claimed or published value sits in a run, and what a publish stage said about it."""
 from __future__ import annotations
 
-from typing import Annotated, Literal, Union
+from typing import Annotated, Literal, Self, Union
 
-from pydantic import BaseModel, Field, TypeAdapter
+from pydantic import (
+    BaseModel, Field, SerializeAsAny, TypeAdapter, field_validator, model_validator,
+)
 
 from app.core.figure_text import render_figure
 from app.core.json_types import JsonScalar
 from app.core.ids import ID
+from app.models.locators import PageCharRange, parse_any_locator
+from app.models.spans import Span, read_span_cell
 
 
 class CitedValue(BaseModel):
@@ -31,6 +35,58 @@ class StageOutputCellCitation(Citation):
     row_ordinal: int = Field(description="The row's position in the stage output, counting from 0.")
     column: str = Field(description="The column's name, spelled as the evidence pool spells it.")
     value: JsonScalar = Field(description="The cell's value, copied exactly as the evidence pool prints it.")
+
+
+# A quote in a file a run read, placed by page and characters; subclasses name the kind.
+class SpanCitation(Citation):
+    run_id: ID = Field(description="The run, as the evidence pool names it.")
+    source_id: ID = Field(description="The file the quote is from, copied exactly.")
+    source_sha256: str = Field(description="The file's sha256, copied exactly.")
+    locator: SerializeAsAny[PageCharRange] = Field(
+        description="The page the quote is on, and where on that page it starts and ends, "
+        "counting characters from 0.")
+    quote: str = Field(description="The quote, copied exactly from the page.")
+
+    @field_validator("locator", mode="before")
+    @classmethod
+    def _parse_locator_by_kind(cls, value: object) -> object:
+        return parse_any_locator(value)
+
+    @model_validator(mode="after")
+    def _names_a_span(self) -> Self:
+        self.build_span()
+        return self
+
+    def build_span(self) -> Span:
+        return Span(source_id=self.source_id, source_sha256=self.source_sha256,
+                    locator=self.locator, quote=self.quote)
+
+
+class SourceSpanCitation(SpanCitation):
+    kind: Literal["source_span"] = "source_span"
+
+
+# A cell holding a span: the cell's address in the run, then where its quote sits in the file.
+class StageOutputSpanCitation(SpanCitation):
+    kind: Literal["stage_output_span"] = "stage_output_span"
+    stage_id: ID
+    row_ordinal: int
+    column: str
+
+    def is_held_in(self, cell: object) -> bool:
+        # The locator alone places the quote, so the cell's prefix and suffix are not compared.
+        span = self.build_span()
+        return any(held.model_copy(update={"prefix": None, "suffix": None}) == span
+                   for held in read_span_cell(cell) or [])
+
+    def build_source_span_citation(self) -> SourceSpanCitation:
+        return SourceSpanCitation(run_id=self.run_id, source_id=self.source_id,
+                                  source_sha256=self.source_sha256, locator=self.locator,
+                                  quote=self.quote)
+
+
+# A figure: one cell of a run, holding a value or a span.
+CellCitation = StageOutputCellCitation | StageOutputSpanCitation
 
 
 class RowsRectangle(BaseModel):
@@ -61,14 +117,17 @@ class StageOutputTableCitation(Citation):
 
 
 PublishedCitation = Annotated[
-    Union[StageOutputCellCitation, StageOutputTableCitation], Field(discriminator="kind")
+    Union[StageOutputCellCitation, StageOutputSpanCitation, StageOutputTableCitation],
+    Field(discriminator="kind"),
 ]
 
 
 def render_citation_value(citation: PublishedCitation) -> str:
-    # A table names rows, not one cell; its row count is the fact it carries.
     if isinstance(citation, StageOutputCellCitation):
         return render_figure(citation.value)
+    if isinstance(citation, StageOutputSpanCitation):
+        return citation.quote
+    # A table names rows, not one cell; its row count is the fact it carries.
     return f"{citation.rectangle.count_rows():,} rows"
 
 
@@ -97,13 +156,18 @@ class TermCitation(Citation):
 
 
 ChallengeCitation = Annotated[
-    Union[StageOutputCellCitation, StageOutputColumnCitation, StageCitation, TermCitation],
+    Union[StageOutputCellCitation, SourceSpanCitation, StageOutputColumnCitation, StageCitation,
+          TermCitation],
     Field(discriminator="kind"),
 ]
 
 
-# ── the same four, stamped with the project when a review is stored ──
+# ── the same five, stamped with the project when a review is stored ──
 class AddressedStageOutputCellCitation(StageOutputCellCitation):
+    project_id: ID
+
+
+class AddressedSourceSpanCitation(SourceSpanCitation):
     project_id: ID
 
 
@@ -120,8 +184,8 @@ class AddressedTermCitation(TermCitation):
 
 
 AddressedChallengeCitation = Annotated[
-    Union[AddressedStageOutputCellCitation, AddressedStageOutputColumnCitation,
-          AddressedStageCitation, AddressedTermCitation],
+    Union[AddressedStageOutputCellCitation, AddressedSourceSpanCitation,
+          AddressedStageOutputColumnCitation, AddressedStageCitation, AddressedTermCitation],
     Field(discriminator="kind"),
 ]
 

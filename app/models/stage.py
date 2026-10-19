@@ -39,6 +39,7 @@ from app.models.stages.human_review_queue import HumanReviewQueueStage, QueueCon
 from app.models.stages.input_data import Connector, InputDataStage
 from app.models.stages.join import EnrichStage, ExpandStage, JoinConfig
 from app.models.stages.llm_transform import LLMConfig, LLMTransformStage
+from app.models.stages.read_pages import ReadPagesConfig, ReadPagesStage
 from app.models.stages.report import ReportConfig, ReportStage
 from app.models.stages.signature import (  # noqa: F401  (re-exported: the stage vocabulary lives here)
     ExtendsSignature,
@@ -76,6 +77,7 @@ Stage = Annotated[
         ExplodeStage,
         DedupeStage,
         SortRankStage,
+        ReadPagesStage,
     ],
     Field(discriminator="type"),
 ]
@@ -155,6 +157,7 @@ class StageDraft(AuthoredStageFields):
     explode: Optional[ExplodeConfig] = None
     dedupe: Optional[DedupeConfig] = None
     sort_rank: Optional[SortRankConfig] = None
+    read_pages: Optional[ReadPagesConfig] = None
 
     def to_stage_spec(self) -> dict[str, Any]:
         return self.model_dump(exclude_unset=True, by_alias=True)

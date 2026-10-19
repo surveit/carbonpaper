@@ -48,6 +48,7 @@ from app.services.claim_shapes import load_claim_shapes, write_claim_shapes
 from app.services.errors import (
     CacheArchiveRejected, ProjectArchiveRejected, WorkflowLoadError,
 )
+from app.services.errors import CacheExportRefused as CacheExportRefused
 from app.services.project_record import read_project_name as read_project_name
 from app.services.stage_cache_transfer import (
     CacheImportReport, export_stage_cache, import_stage_cache, validate_cache_archive,

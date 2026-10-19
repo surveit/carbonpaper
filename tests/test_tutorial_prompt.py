@@ -17,7 +17,7 @@ from app.models.records.project import Project
 from app.services.workflow_summary import StageSummary
 from app.tools.shared import StageOutputRow, StageOutputRows
 from app.tools.tool_specs import find_tool_names
-from app.tools.tutorial import _FIXTURE, TutorialAgentReference, TutorialContext
+from app.tools.tutorial import TUTORIAL_FIXTURE, TutorialAgentReference, TutorialContext
 from app.web.breadcrumbs import _HOME_LABEL
 
 _IDENTIFIER = re.compile(r"[a-z_][a-z0-9_]*")
@@ -92,7 +92,7 @@ def test_the_prompt_says_the_data_is_real_public_record() -> None:
 
 def test_the_prompt_covers_the_five_requested_beats() -> None:
     # "What Carbon Paper is" is the opening message's job now, not the system prompt's.
-    assert "Carbon Paper exists because" in TUTORIAL_OPENING_MESSAGE
+    assert "Carbon Paper turns your investigation into a workflow" in TUTORIAL_OPENING_MESSAGE
 
     prompt = TUTORIAL_SYSTEM_PROMPT
     assert "Seed it" in prompt
@@ -127,7 +127,7 @@ def test_every_control_the_tour_sends_them_to_click_is_one_the_app_renders() -> 
 
 def test_every_name_the_prompt_quotes_is_one_the_code_defines() -> None:
     """A renamed stage, column, field or argument leaves the prompt pointing at nothing."""
-    fixture = WorkflowFile.model_validate_json(_FIXTURE.read_text(encoding="utf-8"))
+    fixture = WorkflowFile.model_validate_json(TUTORIAL_FIXTURE.read_text(encoding="utf-8"))
     run_status_words = {status.value for status in RunStatus} | {"status", "error"}
     known = (
         {stage.id for stage in fixture.stages}

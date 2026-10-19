@@ -1,7 +1,7 @@
 {
   "eval_id": "ai_substance_hard_cases",
   "name": "Hard AI-substance judgments",
-  "description": "9 real Q1/Q2 2026 LDA filings the keyword net caught, most deliberately ambiguous. Each expected label was read independently against Step 3's definition, so a disagreement here is a finding, not a mislabel.",
+  "description": "9 real Q1/Q2 2026 LDA filings the keyword net caught, most deliberately ambiguous. Each expected label was read independently against the definition judge_ai_substance applies, so a disagreement here is a finding about the model.",
   "override_stage": "keep_ai_candidates",
   "target_stage": "judge_ai_substance",
   "expected_outputs": [
@@ -99,7 +99,7 @@
           "name": "is_about_ai",
           "type": "bool",
           "nullable": false,
-          "description": "Whether this filing's own words say the lobbying was really about AI, read independently against Step 3's definition before the workflow ran."
+          "description": "Whether this filing's own words say the lobbying was really about AI, read independently against the definition judge_ai_substance applies, before the workflow ran."
         }
       ]
     }

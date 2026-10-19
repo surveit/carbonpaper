@@ -98,8 +98,11 @@ a.backing { text-decoration: none; }
     font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase;
     color: var(--muted-dim); margin-bottom: 5px;
 }
-.cite-row { display: flex; gap: 10px; align-items: baseline; padding: 4px 0; }
+.cite-row {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; padding: 4px 0;
+}
 .cite-row + .cite-row { border-top: 1px dashed var(--border); }
+.cite-quote { flex-basis: 100%; font-family: var(--prose); font-size: 14px; color: var(--fg); }
 .cite-what {
     font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase;
     color: var(--muted-dim); min-width: 4.5em;
@@ -129,6 +132,12 @@ p.note { font-size: 12px; color: var(--muted-dim); margin: 6px 0 0; }
     padding: 18px 22px 16px; margin-bottom: 14px;
 }
 .claimcard .sentence { margin-top: 0; }
+/* The words the sentence rests on, as the source prints them. */
+.cited-quote {
+    font-family: var(--prose); font-size: 16px; line-height: 1.5; color: var(--muted);
+    margin: 0 0 14px; padding-left: 12px; border-left: 3px solid var(--border-strong);
+}
+.cited-quote a { font-family: var(--ui); font-size: 12px; color: var(--accent); white-space: nowrap; }
 .acts {
     display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
     padding-top: 14px; border-top: 1px solid var(--border);

@@ -12,6 +12,7 @@ from app.core.errors import ReviewValidationError
 from app.core.stage_cache import compute_row_fingerprint
 from app.models import TableSchema, Workflow, WorkflowNotFormed, WorkflowStage
 from app.models.records.run_manifest import RunManifest
+from app.models.run_manifest import index_bound_sources
 from app.models.stages.human_review_queue import QueueConfig, resolve_queue_config
 from app.services import review
 from app.web.breadcrumbs import build_run_child_crumbs
@@ -24,6 +25,7 @@ from app.web.loading import (
     queue_snapshot,
     queue_snapshot_rows,
 )
+from app.web.panel_links import AppPanelLinks
 from app.web.queue_view import (
     QueuePage,
     build_queue_page,
@@ -54,6 +56,7 @@ def queue_page(request: Request, project_id: str, run_id: str, stage_id: str):
             "definition_drift": drift,
             "review_notes_column": queue.review_notes_column,
             "page": page,
+            "links": AppPanelLinks(project_id, run_id),
         },
     )
 
@@ -85,6 +88,7 @@ def queue_card_partial(
             "page": page,
             "item": positioned.item,
             "row_position": positioned.row_position,
+            "links": AppPanelLinks(project_id, run_id),
         },
     )
 
@@ -143,18 +147,16 @@ def _build_page(
         None if fingerprints is None
         else find_definition_drift(stage_def, fingerprints.stage_fingerprint)
     )
+    run_record = load_run_record(project_id, run_id)
     page = build_queue_page(
         project_id, run_id, stage_def, queue,
         queue_snapshot(project_id, run_id, stage_id), fingerprints, drift,
-        _find_closed_note(project_id, run_id, stage_id),
+        # The one authority on whether this queue still takes decisions: the run's own record.
+        find_review_closed_note(run_record.find_stage_record(stage_id)),
+        {sha256: binding.filename for sha256, binding
+         in index_bound_sources(run_record.input_bindings).items()},
     )
     return drift, page
-
-
-def _find_closed_note(project_id: str, run_id: str, stage_id: str) -> str | None:
-    """The one authority on whether this queue still takes decisions: the run's own record."""
-    return find_review_closed_note(
-        load_run_record(project_id, run_id).find_stage_record(stage_id))
 
 
 # --- stage lookup, shared by every route ---------------------------------------

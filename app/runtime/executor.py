@@ -16,9 +16,12 @@ from app.core.errors import SubsetRunError
 from app.core.frames import frame_to_table, write_frame_table_with_csv_fallback
 from app.models import StageType, Workflow, WorkflowStage
 from app.models.run_manifest import (
+    QUOTE_REFUSAL_ERROR_TYPE,
     SCHEMA_REFUSAL_ERROR_TYPE,
+    InputBinding,
     StageErrorInfo,
     StageRecord,
+    index_bound_sources,
 )
 from app.models.stage_contribution import RowError, StageContribution
 from app.models.run_manifest import RunKind
@@ -33,10 +36,15 @@ from .errors import RunCancelled
 from .manifest import RunManifest, create_run_manifest, write_manifest
 from .run_log import RUN_START, STAGE_DONE, STAGE_START, RunLog
 from .progress import StageProgressReporter
-from .stages import HANDLERS, StageHandler
-from .lineage import RowLineage, concatenated_inputs_lineage, kept_rows_lineage
+from .spans import find_span_issues
+from .stages import HANDLERS, PREFLIGHTS, StageHandler
+from .lineage import (
+    RowLineage,
+    concatenated_inputs_lineage,
+    kept_rows_lineage,
+    refuse_built_rows_with_no_lineage,
+)
 from .lineage_sidecar import write_lineage_sidecar
-from app.models.severity import UserFacingErrorSeverity
 from .key_coverage import find_key_coverage_issues
 from .validation import (
     Issue,
@@ -87,7 +95,7 @@ def execute_subset(
         raise SubsetRunError(f"subset names stage(s) not in the workflow: {missing}")
     ordered = topological_sort([by_id[sid] for sid in stage_ids])
     (run_dir / "outputs").mkdir(parents=True, exist_ok=True)
-    ctx = _subset_ctx(run_dir, identity, params)
+    ctx = _subset_ctx(run_dir, identity, params, _bind_subset_sources(workflow))
     manifest = create_run_manifest(
         ordered, ctx, run_id=run_dir.name, project_id=project_id,
         workflow_version=workflow_version, input_bindings={}, kind=kind)
@@ -102,11 +110,23 @@ def execute_subset(
 
 def _subset_ctx(
     run_dir: Path, identity: RunIdentity | None, params: RunParameters,
+    bound_sources: dict[str, InputBinding],
 ) -> RunContext:
     if identity is not None:
         return RunContext.for_workflow_test_run(
-            run_dir, identity.project, identity.run_id, params)
-    return RunContext.for_stages_outside_a_run(run_dir, params)
+            run_dir, identity.project, identity.run_id, params, bound_sources=bound_sources)
+    return RunContext.for_stages_outside_a_run(run_dir, params, bound_sources=bound_sources)
+
+
+def _bind_subset_sources(workflow: Workflow) -> dict[str, InputBinding]:
+    """An input stage whose file is missing binds nothing, so a span quoting it is refused."""
+    preflighted = {
+        workflow_stage.id: PREFLIGHTS[StageType(workflow_stage.stage.type)](workflow_stage)
+        for workflow_stage in workflow.list_workflow_stages()
+        if StageType(workflow_stage.stage.type) in PREFLIGHTS
+    }
+    return index_bound_sources({
+        stage_id: record for stage_id, (_, record) in preflighted.items() if record is not None})
 
 
 def _raise_if_run_failed(manifest: RunManifest) -> None:
@@ -257,6 +277,15 @@ def _gather_stage_inputs(
     return inputs_for_stage, window
 
 
+def _find_quote_issues(
+    workflow_stage: WorkflowStage, table: pa.Table, ctx: RunContext
+) -> list[Issue]:
+    schema = workflow_stage.output_schema
+    if schema is None:
+        return []
+    return find_span_issues(table, schema, ctx.bound_sources, ctx.source_texts)
+
+
 def _find_undeclared_column_issues(
     workflow_stage: WorkflowStage, table: pa.Table,
     inputs_for_stage: dict[str, pa.Table],
@@ -380,6 +409,7 @@ def _finalize_stage_output(
         output = StageOutput(pa.table({}))
     row_errors = _merge_stage_contribution(output.contribution, sid, manifest, record)
     lineage = _stage_row_lineage(workflow_stage, output, inputs_for_stage, window)
+    refuse_built_rows_with_no_lineage(workflow_stage, lineage)
     table = output.table
     if not workflow_stage.inputs:
         # A stage with no inputs originates its rows outside the run, so the
@@ -395,6 +425,10 @@ def _finalize_stage_output(
     out_rep.issues.extend(
         _find_undeclared_column_issues(workflow_stage, table, inputs_for_stage))
     out_rep.issues.extend(find_dropped_column_issues(output.contribution.dropped_columns))
+    out_rep.issues.extend(
+        Issue("warning", None, warning) for warning in output.contribution.warnings)
+    quote_issues = _find_quote_issues(workflow_stage, table, ctx) if out_rep.ok else []
+    out_rep.issues.extend(quote_issues)
     if row_errors:
         out_rep.issues[0:0] = [
             Issue("error", None,
@@ -411,6 +445,13 @@ def _finalize_stage_output(
         record.error = StageErrorInfo(
             type="RowGenerationError",
             message=_summarize_row_errors(row_errors),
+            traceback=None,
+        )
+    elif quote_issues:
+        record.status = StageStatus.ERROR
+        record.error = StageErrorInfo(
+            type=QUOTE_REFUSAL_ERROR_TYPE,
+            message=_summarize_quote_refusals(sid, quote_issues),
             traceback=None,
         )
     elif not out_rep.ok:
@@ -571,8 +612,12 @@ def _summarize_row_errors(row_errors: list[RowError]) -> str:
     return f"{len(row_errors)} row(s) failed generation: {head}{more}"
 
 
+def _summarize_quote_refusals(sid: str, issues: list[Issue]) -> str:
+    return "; ".join(f"stage '{sid}' column '{issue.column}': {issue.message}" for issue in issues)
+
+
 def _summarize_output_schema_errors(sid: str, report: ValidationReport) -> str:
-    errors = [issue for issue in report.issues if issue.severity == UserFacingErrorSeverity.error]
+    errors = report.list_errors()
     named = sorted({issue.column for issue in errors if issue.column})
     columns = f" (column(s): {', '.join(named)})" if named else ""
     return (

@@ -1,16 +1,9 @@
 # app/runtime — the Runner (workflow executor)
 
-Executes a workflow and persists the result. Does not import the compiler or the web app.
-**It reads no workflow versions.** A caller resolves which version to pin and loads that
-snapshot (`app/services/versioning.py`: `resolve_version_id` → `load_version_stages`) and
-hands the runner that version as a `Workflow`; `app/services/run.py` is the one place that composes this for
-a production run. An import-linter contract forbids `app/runtime/runner.py` from importing
-`app.services` at all, so the arrow between them points one way only.
+**It reads no workflow versions**; a caller hands it one. Which caller, and the contract
+holding that: the `app/runtime/` section of `docs/architecture.md`.
 
 ## `runner.py` — the executor
-`topological_sort` → `execute_run(project_dir, repo_root, workflow, workflow_version)`. Per
-stage: validate declared inputs (`validation.py`), dispatch to the type's handler, validate
-the output, write `outputs/<stage>.parquet`, append to the run record.
 - **Duplicate input rows are allowed.** A stage decides nothing per row-instance: the
   stage cache and a `human_review_queue` decision are both keyed on row CONTENT, so two
   identical rows share one cached result and one recorded decision — approving the content
@@ -41,8 +34,10 @@ the output, write `outputs/<stage>.parquet`, append to the run record.
 
 ## `stages/` — one module per stage type (`HANDLERS`)
 `input_data` connector `file` (csv/tsv/parquet/json/geojson; `_read_geojson` flattens a
-FeatureCollection); `python_row_function`/`python_frame_function`
-(`function: {kind: module|inline}`, row variant mapped per row);
+FeatureCollection), or a pack's connector kind, whose files `prepare_run` acquires and stores
+as Sources and whose handler reads one row per file (docs/packs.md); `python_row_function`/`python_frame_function`
+(`function: {kind: module|inline}`, row variant mapped per row; the frame variant must
+declare the keyword-only `lineage` recorder and account for every row it returns);
 `starlark_row_function` (`starlark_functions.py`, row-mapped; compiles the stage's
 inline Starlark through `app/runtime/starlark_code.py`, the one place the interpreter
 is driven and a `refuse(...)` call is translated to `StepRefused`); `enrich`/`expand`
@@ -50,7 +45,10 @@ is driven and a `refuse(...)` call is translated to `StepRefused`); `enrich`/`ex
 non-unique reference, `expand` allows m:n fan-out); `aggregate`;
 `llm_transform` (row-mapped, bounded parallelism);
 `human_review_queue` (row fingerprint → cached decision or halt);
-`report` (a `function` module that writes artifacts).
+`report` (a `function` module that writes artifacts);
+`read_pages` (one row per page of each file its input names, found in `ctx.bound_sources`
+through the verifier's own `require_bound_file` and read once through `ctx.source_texts`; a
+file the run did not read, or whose bytes changed since, fails the stage).
 
 **A row-mapped stage sees only what its signature `reads`.**
 
@@ -96,25 +94,28 @@ stays the source of truth for stage status; this log is only ever the drill-down
   is the only record of a call the tool layer rejected before the tool function ran.
 - **Cached vs computed.** Every terminal row event carries `source`. A row the stage-result
   cache answered emits ONE `row_ok` marked `cached` — no `row_start`, no LLM detail,
-  because nothing ran.
+  because nothing ran. A row a model decided names its judgment (`judgment_id`), computed
+  or replayed; an entry recorded before the judgment ledger names none.
 - **Detail attribution.** The row driver binds a `DetailSink` ContextVar for the duration of
   one GROUP of rows, over the input positions that group covers, so `llm.py` can log the
   prompt/thinking/response several frames down without a log being threaded through every
   mapper. The binding happens on the worker thread that makes the call — a pool thread starts
   with an empty context. Every emitter in `row_events.py` takes `RunLog | None` and no-ops on
   None, so the driver never branches on whether logging is on.
-- **One function per group.** `_StageExecution.run_group` maps, validates, logs the outcome and
-  records, in that order, as straight-line statements. It is deliberately not composed from
+- **One function per group.** `_StageExecution.run_group` maps, validates, records each model
+  judgment, logs the outcome and records the cache entry, in that order, as straight-line
+  statements. On a project run a row an `llm_transform` answered with no `JudgmentDraft` stops
+  the stage (`JudgmentUnrecorded`); judgments are written only where the cache is writable,
+  whether or not `Stage.cache` is on. It is deliberately not composed from
   wrappers: the order is the content, and nesting hides it.
 
 ## LLM backend (`llm_transform`)
 - `options.py` `require_agent_backend()` raises unless the agent backend can run
   (`claude_agent_sdk` importable and a `claude` CLI located, incl. Windows
   `~/.local/bin/claude.exe`). The agent is the ONLY backend — no fallback of any kind.
-- `llm.py` `call_llm` renders the stage's prompt and runs a headless structured-output
-  `app.core.agent.agent.Agent` whose `target_schema` is the stage's compiled reply model, so
-  the reply is validated by construction rather than parsed from prose. Run per row by the
-  row driver under bounded parallelism.
+- **A span column is answered with a quote.** `stages/span_replies.py` finds the quote in
+  the column named by `quoted_from` and mints the span; the model never supplies an
+  address. See `docs/llm-transform-output-spec.md` rule 5.
 - **A stage declaring `llm.tools` researches.** The names (from
   `models.stages.llm_transform.GRANTABLE_TOOLS`) are granted to the agent alongside
   `submit_answer`, and the row moves onto the research budget — `RESEARCH_TIMEOUT_S` and
@@ -130,6 +131,8 @@ stage schemas in `app/models/`. `report` is the one type that resolves none, and
 the report says so rather than checking nothing silently. An error-severity issue in the OUTPUT report (missing column, failed coercion,
 value outside a declared enum, null in a non-nullable column) fails the
 stage: the record is `error` with an `OutputSchemaViolation` and downstream stages are blocked.
+An output that passes is then held to its spans, and a refusal fails the stage as
+`QuoteRefusal` (docs/architecture.md).
 `validation_warnings` means warning-severity issues only. Input-side issues alone still only warn.
 An out-of-`range` number is one of those errors, enforced at every level a number passes: the
 reply an `llm_transform` may submit, the row its mapper returns, and the frame the stage lands.

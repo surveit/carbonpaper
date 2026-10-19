@@ -13,7 +13,8 @@ from starlette.concurrency import run_in_threadpool
 
 from app.services import project
 from app.services.stage_cache_transfer import (
-    CacheArchiveRejected, count_cached_entries, export_stage_cache, import_stage_cache,
+    CacheArchiveRejected, CacheExportRefused, count_cached_entries, export_stage_cache,
+    import_stage_cache,
 )
 from app.web.breadcrumbs import build_home_crumbs
 from app.web.config import templates
@@ -47,8 +48,12 @@ def cache_page(request: Request, msg: str | None = None) -> HTMLResponse:
 @router.get("/admin/export-cache/{project_name}")
 def download_cache(project_name: str) -> Response:
     project_id = _known_project(project_name)
+    try:
+        archive = export_stage_cache(project_id)
+    except CacheExportRefused as exc:
+        return _redirect_to_cache_page(str(exc))
     return Response(
-        content=export_stage_cache(project_id),
+        content=archive,
         media_type="application/zip",
         headers={
             "content-disposition": f'attachment; filename="{project_id}-cache.zip"'

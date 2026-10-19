@@ -229,7 +229,8 @@ def test_downloading_with_cache_serves_an_archive_holding_both_halves(workspace_
     assert r.status_code == 200
     assert r.headers["content-disposition"] == f'attachment; filename="{_loaded_project_id()}.zip"'
     with zipfile.ZipFile(BytesIO(r.content)) as archive:
-        assert set(archive.namelist()) == {"workflow.json", "manifest.json", "entries.jsonl"}
+        assert set(archive.namelist()) == {
+            "workflow.json", "manifest.json", "entries.jsonl", "judgments.jsonl"}
         assert WorkflowFile.model_validate_json(archive.read("workflow.json")).name == _BUNDLE
 
 

@@ -12,9 +12,10 @@ from app.core.timestamp_ids import mint_timestamp_id
 from app.models import Stage
 from app.models.workflow import find_stages_reaching_report, parse_workflow
 from app.models.records.review_guide import ReviewGuide
-from app.models.records.workflow_version import MAX_MESSAGE_CHARS, WorkflowVersion
+from app.models.records.workflow_version import MAX_MESSAGE_CHARS, Method, WorkflowVersion
 from app.core.utils import format_errors
 from app.services.errors import WorkflowLoadError
+from app.services.methodology import read_methodology
 from app.services.terms import load_terms
 
 
@@ -34,8 +35,9 @@ def create_version_from_stages(
     workflow = parse_workflow(stages)
 
     version_id = mint_timestamp_id()
+    terms = load_terms(project_id)
     schemas = [schema.model_dump(mode="json", exclude_none=True)
-               for schema in load_terms(project_id).schemas.schemas]
+               for schema in terms.schemas.schemas]
     doc_id = f"{project_id}/{version_id}"
 
     v = WorkflowVersion(
@@ -45,6 +47,8 @@ def create_version_from_stages(
         message=message,
         stages=workflow.stages,
         schemas=schemas,
+        method=Method(row_types=terms.row_types, verbs=terms.verbs,
+                      methodology=read_methodology(project_id)),
     )
     v.save()
     return v

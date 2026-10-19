@@ -4,6 +4,7 @@ payload. The manifest itself is a stored record — `app.runtime.manifest`.
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from enum import Enum
 from datetime import datetime
 from pathlib import PurePath
@@ -16,6 +17,7 @@ from app.core.run_status import StageStatus
 from app.models.schema import StageId, TypeUnsafeUserStageConfigOverride
 from app.models.stage import Stage
 from app.models.stages.stage_base import StageType
+from app.models.workflow import find_stages_upstream_of
 from app.core.ids import ID
 
 
@@ -23,6 +25,8 @@ from app.core.ids import ID
 # schema it declares. Nothing was raised: the data is not what the stage says it is,
 # which is the data owner's to fix, not the author of the code's.
 SCHEMA_REFUSAL_ERROR_TYPE = "OutputSchemaViolation"
+# The `StageErrorInfo.type` of a stage whose output carries a span its source refuses.
+QUOTE_REFUSAL_ERROR_TYPE = "QuoteRefusal"
 
 
 class StageErrorInfo(BaseModel):
@@ -126,6 +130,40 @@ def read_run_bindings(
     return dict(raw.get("run_bindings") or {})
 
 
+class RowsPendingReview(BaseModel):
+    # None where a queue holding the stage recorded no pending count.
+    count: int | None
+
+
+def find_rows_pending_review(
+    raw: Mapping[str, Any], stages: Sequence[Stage]
+) -> dict[str, RowsPendingReview]:
+    """Each stage a queue awaiting review holds, at or upstream of it, and the rows it waits on."""
+    pending_by_queue = _read_pending_rows_by_queue(raw)
+    held: dict[str, RowsPendingReview] = {}
+    for stage in stages:
+        at_or_upstream = {stage.id} | find_stages_upstream_of(stages, stage.id)
+        counts = [count for queue_id, count in pending_by_queue.items() if queue_id in at_or_upstream]
+        if counts:
+            held[stage.id] = RowsPendingReview(count=_sum_known_counts(counts))
+    return held
+
+
+def _read_pending_rows_by_queue(raw: Mapping[str, Any]) -> dict[str, int | None]:
+    stats = raw.get("human_review_queue_stats") or {}
+    return {
+        record["stage_id"]: (stats.get(record["stage_id"]) or {}).get("items_pending")
+        for record in raw["stage_records"]
+        if record.get("status") == StageStatus.AWAITING_REVIEW
+    }
+
+
+def _sum_known_counts(counts: list[int | None]) -> int | None:
+    """One unrecorded count leaves the total unknown rather than short."""
+    known = [count for count in counts if count is not None]
+    return sum(known) if len(known) == len(counts) else None
+
+
 class ReadFile(BaseModel):
     """One file a stage read, as its preflight weighed it."""
 
@@ -134,6 +172,8 @@ class ReadFile(BaseModel):
     bytes: int
     # None outside the store, and on every run recorded before this field existed.
     file_id: str | None = None
+    # None for an upload, a file outside the store, and every run recorded before this field.
+    origin_url: str | None = None
 
     @property
     def filename(self) -> str:
@@ -158,11 +198,22 @@ class InputBinding(BaseModel):
     bytes: int | None = None
     source: str | None = None
     file_id: str | None = None
+    origin_url: str | None = None
 
 
 def read_input_bindings(raw: dict[str, Any]) -> list[InputBinding]:
+    return flatten_input_bindings(raw.get("input_bindings") or {})
+
+
+def index_bound_sources(recorded: Mapping[str, Any]) -> dict[str, InputBinding]:
+    return {
+        binding.sha256: binding
+        for binding in flatten_input_bindings(recorded) if binding.sha256
+    }
+
+
+def flatten_input_bindings(recorded: Mapping[str, Any]) -> list[InputBinding]:
     """One entry per FILE, so a stage that read several contributes several."""
-    recorded = raw.get("input_bindings") or {}
     return [
         binding
         for stage_id, record in sorted(recorded.items())
@@ -176,7 +227,8 @@ def _read_one_stages_files(stage_id: ID, record: dict[str, Any]) -> list[InputBi
     return [
         # `source` sits on the stage's record; every file it read was bound the same way.
         InputBinding(stage_id=stage_id, path=f.path, filename=f.filename,
-                     sha256=f.sha256, bytes=f.bytes, source=source, file_id=f.file_id)
+                     sha256=f.sha256, bytes=f.bytes, source=source, file_id=f.file_id,
+                     origin_url=f.origin_url)
         for f in files
     ]
 

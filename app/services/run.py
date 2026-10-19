@@ -17,11 +17,12 @@ from app.core.background import run_in_background
 from app.core.errors import RunVersionUnresolvableError
 from app.core.frames import read_frame_column_names
 from app.models import Workflow, WorkflowStage
-from app.models.run_manifest import read_run_bindings
+from app.models.run_manifest import index_bound_sources, read_run_bindings
 from app.models.schema import StageId, TypeUnsafeUserStageConfigOverride
 from app.runtime.cancellation import discard_cancel
 from app.models.records.run_manifest import RunManifest
 from app.models.run_manifest import RunKind
+from app.models.spans import Span
 from app.runtime.manifest import (
     RunEntry as RunEntry,
     list_run_entries as list_run_entries,
@@ -35,6 +36,12 @@ from app.runtime.runner import prepare_run, resume_run, run_prepared
 from app.runtime.review_decisions import write_review_decisions
 from app.services.review import resolve_review_decisions
 from app.runtime.citations import build_row_trace_url as build_row_trace_url
+from app.runtime.spans import (
+    SPAN_REFUSALS as SPAN_REFUSALS,
+    SourceTextCache as SourceTextCache,
+    require_page_locator,
+    verify_span,
+)
 from app.services.errors import WorkflowLoadError
 from app.services.run_manifest_metadata import name_run
 from app.services.versioning import load_version, load_version_stages, resolve_version_id
@@ -149,6 +156,15 @@ def read_stage_output_table(project_id: str, run_id: str, stage_id: str) -> pa.T
     run_dir = resolve_run_dir(project_id, run_id, RunKind.production)
     _validate_run_exists(project_id, run_id)
     return read_stage_output_frame_table(project_id, run_dir, stage_id, RunKind.production)
+
+
+def verify_run_span(project_id: str, run_id: str, span: Span, texts: SourceTextCache) -> str:
+    """Raises a SPAN_REFUSALS error unless `span` holds in the file this run read; returns its page text."""
+    manifest = read_run_manifest(project_id, run_id, RunKind.production)
+    sources = index_bound_sources(manifest.input_bindings)
+    verify_span(span, sources, texts)
+    page = require_page_locator(span).page
+    return texts.read_page_text(Path(sources[span.source_sha256].path), span.source_sha256, page)
 
 
 def read_output_column_counts(project_id: str, manifest: Mapping[str, Any]) -> dict[str, int]:

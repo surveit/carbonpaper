@@ -3,6 +3,7 @@
    the bundle carries its own, and without either they are the frame's first.
    Asked for the figure's rows, the table holds its columns and nothing else; asked
    for the frame, what the figure did not come through goes dim. #}
+{%- from "_data_cell.html" import span_cites %}
 {%- set row_ordinals = ordinals | default(preview.ordinals, true) | default([], true) %}
 {%- set mine = reached_rows | default([], true) %}
 {%- set behind = columns_behind | default([], true) %}
@@ -15,7 +16,8 @@
   {%- set trace_href = links.row_trace(stage.stage_id, ordinal) %}
   <tr{% if mine %} class="{{ 'mine' if ordinal in mine else 'aside' }}"{% endif %}{% if trace_href %} data-href="{{ trace_href }}"{% endif %}>
     {%- for c in columns %}{% set v = row[c] | string %}{% set off = 'aside' if behind and c not in behind else '' %}
-    {%- if v[:4] == 'http' %}<td class="cell-url {{ off }}"><a href="{{ v }}" target="_blank" rel="noopener">{{ v }}</a></td>
+    {%- if row[c].cites is defined %}<td class="cell-span {{ off }}">{{ span_cites(row[c], links) }}</td>
+    {%- elif v[:4] == 'http' %}<td class="cell-url {{ off }}"><a href="{{ v }}" target="_blank" rel="noopener">{{ v }}</a></td>
     {%- else %}<td{% if off %} class="{{ off }}"{% endif %}>{{ v | truncate(240) }}</td>{% endif %}{% endfor %}</tr>
   {%- endfor %}</tbody>
 </table></div>

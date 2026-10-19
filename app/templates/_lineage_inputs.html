@@ -23,6 +23,10 @@
         read, so there is no page for it</span>{% endif %}
     </div>
     <span class="inpath">{{ f.path }}</span>
+    {% if f.origin_url %}
+    <span class="inorigin">fetched {{ f.fetched_at | friendly_time }} from
+      <a href="{{ f.origin_url }}" target="_blank" rel="noopener">{{ f.origin_url }}</a></span>
+    {% endif %}
 
     <div class="instrip">
       <span>read by {% if f.read_by_href %}<a href="{{ f.read_by_href }}"><code>{{

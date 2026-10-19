@@ -1,0 +1,41 @@
+{# A project's row types and verbs, one group of cards each. #}
+{% macro glossary_words(row_types, verbs, none_agreed="None agreed yet.") %}
+<h3 class="dm-group-heading">
+  <span class="type-tag">row types</span>
+  <span class="muted">— {{ row_types|length }} word{% if row_types|length != 1 %}s{% endif %} for what one row of this project's data is</span>
+</h3>
+{% if row_types %}
+<div class="dm-cards">
+  {% for row_type in row_types %}
+  <article class="dm-card" id="term-{{ row_type.id }}">
+    <div class="dm-card-head">
+      <code class="dm-card-name">{{ row_type.id }}</code>
+    </div>
+    {% if row_type.title and row_type.title != row_type.id %}<p class="dm-card-title">{{ row_type.title }}</p>{% endif %}
+    <p class="dm-card-desc">{{ row_type.definition }}</p>
+  </article>
+  {% endfor %}
+</div>
+{% else %}
+<p class="lede">{{ none_agreed }}</p>
+{% endif %}
+
+<h3 class="dm-group-heading">
+  <span class="type-tag">verbs</span>
+  <span class="muted">— {{ verbs|length }} word{% if verbs|length != 1 %}s{% endif %} for what this project does to them</span>
+</h3>
+{% if verbs %}
+<div class="dm-cards">
+  {% for verb in verbs %}
+  <article class="dm-card" id="term-{{ verb.name }}">
+    <div class="dm-card-head">
+      <code class="dm-card-name">{{ verb.name }}</code>
+    </div>
+    <p class="dm-card-desc">{{ verb.definition }}</p>
+  </article>
+  {% endfor %}
+</div>
+{% else %}
+<p class="lede">{{ none_agreed }}</p>
+{% endif %}
+{% endmacro %}

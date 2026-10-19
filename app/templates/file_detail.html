@@ -15,7 +15,7 @@
 
   Context the route passes:
     state = shell_state(...); section = "files"
-    file  = file_detail_view.build_file_detail_view(project, file_id)
+    file  = file_detail_view.build_file_detail_view(project, file_id, page, marked)
 #}
 {% block title %}{{ file.filename }} · files{% endblock %}
 
@@ -34,10 +34,19 @@
     <span class="type-tag">{{ file.format }}</span>
     <span>{{ file.size }}</span>
     {% if file.contents %}<span>{{ file.contents.row_count | figure }} rows × {{ file.contents.column_count }} columns</span>{% endif %}
-    <span>added {{ file.added | friendly_time }}</span>
-    <span><code class="files-hash">{{ file.sha256[:12] }}…</code></span>
+    {% if file.page %}<span>{{ file.page.page_count }} page{{ "" if file.page.page_count == 1 else "s" }}</span>{% endif %}
+    {% if file.origin_url %}
+    <span class="file-origin">fetched {{ file.fetched_at | friendly_time }} from
+      <a href="{{ file.origin_url }}" target="_blank" rel="noopener">{{ file.origin_url }}</a></span>
+    {% else %}
+    <span>uploaded {{ file.added | friendly_time }}</span>
+    {% endif %}
+    <span><code class="files-hash" title="sha256 {{ file.sha256 }}">{{ file.sha256[:12] }}…</code></span>
   </p>
 </div>
+
+{# A reader arriving from a quote came for the page, so it leads. #}
+{% if file.page %}{% include "_source_page.html" %}{% endif %}
 
 <section class="file-card">
   <form class="file-provenance" method="post"
@@ -106,7 +115,7 @@
   </details>
 </section>
 
-{% else %}
+{% elif not file.page %}
 <section class="file-section">
   <p class="file-not-a-table">This file is not a table anything here reads, so it has no
     shape and no rows. It is stored, and a run may still take it as bytes.</p>

@@ -22,7 +22,9 @@ prompt never hand-writes — and never drifts from — an output shape.
    object's shape is described by the same primitives as a table, recursively)
    or `Column.value_type` (an open map: arbitrary string keys whose values are
    one scalar type). Neither, both, or either one on a non-json column is
-   refused by `Column._json_shape`. There is one structured type, `json`.
+   refused by `Column._json_shape`. `json` is the one structured type whose
+   shape an author states; the other, `span`, has a fixed shape
+   (`app/models/spans.py`).
 4. **No revise-in-place.** A stage's output table is the review surface;
    overwriting a column destroys history exactly where review happens (the
    upstream table still exists, but the reviewer of *this* table can no longer
@@ -30,6 +32,17 @@ prompt never hand-writes — and never drifts from — an output shape.
    `revised_score`). For this stage type the rule holds by construction —
    `find_llm_signature_issues` refuses a `rewrites` entry. Other stage types may
    rewrite; there the rule is a modeling convention only.
+5. **A span column is answered with a verbatim quote and minted by the
+   runtime.** The model supplies only `quote`, and `prefix`/`suffix` where the
+   quote repeats. It never supplies an address. The added column names in
+   `quoted_from` the `span` or `list[span]` column it reads, and the prompt shows
+   that column as its text. The runtime finds the quote there and copies
+   `source_id`, `source_sha256` and the page from that span. For a `list[span]`
+   column, the quote must be one of the listed quotes whole. A span nested in a
+   list or a `json` column is refused, because nothing mints it. Normalizing
+   whitespace does not join a word broken across lines with a hard hyphen, so
+   such a word is quoted as printed, hyphen and break included: "pro- ceeds",
+   not "proceeds".
 
 ## Where each rule lives
 
@@ -45,7 +58,7 @@ prompt never hand-writes — and never drifts from — an output shape.
   ineligible stage cannot be built, so it cannot be loaded, versioned, or run.
 - **The reply spec is `signature.adds`, read directly.** Both execution paths in
   `app/runtime/stages/llm_transform.py` build
-  `TableSchema(columns=signature.adds)` and compile it with `to_pydantic_model`:
+  `TableSchema(columns=signature.adds)` and compile it with `to_reply_model`:
   `build_llm_row_mapper` for `batch_size: 1`, and `_build_batch_reply_schema` for
   the batched path, where each item additionally carries the runtime-assigned
   `row_number` that rejoins it to its row. The type, nullability, enum, numeric
@@ -53,8 +66,23 @@ prompt never hand-writes — and never drifts from — an output shape.
   therefore reach the model as the reply schema itself. The stage panel shows a
   reviewer that same list — `stage.signature.adds`, under **expected answer
   shape** in `_stage_executable.html`.
-- **The reply is validated by construction.** `call_llm` runs an
-  `app.core.agent.agent.Agent` whose `target_schema` is that compiled model, so
+- **Rule 5 lives in `app/runtime/stages/span_replies.py`.** `to_reply_model`
+  compiles a span column to `SpanReply`. `complete_spans` searches the
+  quoted-from text with whitespace, ligatures and soft hyphens normalized, and
+  maps the match back to raw offsets. The stored quote is therefore the page's
+  own characters. It then mints the span with `narrow_span`. On the per-row path
+  a quote found nowhere, or at more than one place, is sent back up to
+  `max_retries` times with what to fix: copy the words exactly as shown, or give
+  a prefix or suffix. The model's correction names no file or page, because the
+  model was shown neither. After the last attempt the row carries `_error`
+  naming the file, the page and the quote. Two listed spans at different places
+  that read the same fail the row at once, because a quote alone cannot pick
+  one. A batched call is not re-asked for one item: that item's row carries the
+  refusal.
+  `find_llm_signature_issues` holds `quoted_from` to a read `span` or
+  `list[span]` column.
+- **The reply is validated by construction.** `call_llm` renders the stage's prompt and
+  runs a headless `app.core.agent.agent.Agent` whose `target_schema` is that compiled model, so
   a schema-invalid reply is re-asked inside the agent's own loop rather than
   parsed out of prose. A row that never yields a valid reply is tagged with the
   `_error` sentinel and surfaces as an error-severity output issue; the row

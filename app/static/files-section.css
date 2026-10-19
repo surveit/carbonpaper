@@ -50,6 +50,8 @@
 /* An export's name is long and unbroken; it wraps rather than pushing the row wide. */
 .files-name code { overflow-wrap: anywhere; }
 .files-act { text-align: right; }
+/* Cut to the column's width; the whole URL is its title and the file page's link. */
+.files-origin { display: block; overflow: hidden; text-overflow: ellipsis; }
 
 /* A trash icon, not a word: the row is a list of files, and the only verb it offers
    should not be wider than the hash beside it. */

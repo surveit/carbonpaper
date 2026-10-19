@@ -6,6 +6,7 @@ worktree under ``.claude/``), whose absolute parts would match ``startswith(".")
 from __future__ import annotations
 
 import os
+import subprocess
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -40,9 +41,10 @@ def scan_all_source() -> list[Path]:
 
 def scan_all_text(suffixes: tuple[str, ...]) -> list[Path]:
     files = [
-        path
-        for path in _walk_pruned(_REPO_ROOT, suffixes, _EXEMPT_TEXT_PARTS)
-        if not _is_exempt(path.name, _EXEMPT_TEXT_PARTS)
+        _REPO_ROOT / relative
+        for relative in _list_checkout_files(_REPO_ROOT)
+        if relative.name.endswith(suffixes)
+        and not any(_is_exempt(part, _EXEMPT_TEXT_PARTS) for part in relative.parts)
     ]
     if not files:
         raise ValueError(
@@ -77,6 +79,26 @@ def _iter_source_under(base: Path) -> Iterator[Path]:
     for path in _walk_pruned(base, (".py",), _EXEMPT_PARTS):
         if _is_source(path.relative_to(base)):
             yield path
+
+
+def _list_checkout_files(root: Path) -> list[Path]:
+    # Untracked files git does not ignore count: they reach CI once committed.
+    command = [
+        "git", "-C", str(root), "ls-files", "-z", "--deduplicate",
+        "--cached", "--others", "--exclude-standard",
+    ]
+    try:
+        listing = subprocess.run(command, capture_output=True, check=True, encoding="utf-8")
+    except FileNotFoundError as error:
+        raise RuntimeError("scan_all_text lists files with git, which is not on PATH") from error
+    except subprocess.CalledProcessError as error:
+        raise RuntimeError(
+            f"scan_all_text lists files with git, and `git ls-files` failed in {root}: "
+            f"{error.stderr.strip()}"
+        ) from error
+    relatives = [Path(name) for name in listing.stdout.split("\0") if name]
+    # --cached also lists a tracked file deleted from the working tree.
+    return sorted(relative for relative in relatives if (root / relative).is_file())
 
 
 def _walk_pruned(base: Path, suffixes: tuple[str, ...], exempt: set[str]) -> list[Path]:

@@ -1,6 +1,10 @@
-// One file's page: the shape filters, what a facet's shares are over, the note a
-// sampled file owes, and the typed confirmation the delete takes.
+// One file's page: the marked quote, the shape filters, what a facet's shares are over,
+// the note a sampled file owes, and the typed confirmation the delete takes.
 (function () {
+  // A reader arriving from a quote came for the marked characters, not the page's top.
+  var marked = document.querySelector(".source-page-text mark");
+  if (marked) marked.scrollIntoView({ block: "center" });
+
   document.addEventListener("click", function (event) {
     var scale = event.target.closest(".facet-scale button");
     if (scale) return rescaleFacet(scale);

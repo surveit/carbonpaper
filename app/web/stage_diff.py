@@ -19,7 +19,7 @@ from app.models.stages.signature import list_read_column_names
 from app.models.stage import is_grain_and_order_preserving
 from app.runtime.lineage_sidecar import read_lineage_sidecar
 from app.runtime.manifest import resolve_output_path
-from app.core.frames import read_frame_file
+from app.core.frames import read_frame_file_for_display
 from app.web.column_order import (
     ColumnGroup,
     find_column_group,
@@ -464,7 +464,7 @@ def _read_frame(run_dir: Path, rel_path: Optional[str]) -> Optional[pd.DataFrame
         path = resolve_output_path(run_dir, rel_path)
         if path is None or not path.exists():
             return None
-        return read_frame_file(path)
+        return read_frame_file_for_display(path)
     except (OSError, ValueError):
         # An unreadable frame means fallback to the plain output view, whose own
         # loader reports the read error in the pane — nothing is hidden here.

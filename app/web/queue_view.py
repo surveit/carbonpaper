@@ -21,6 +21,7 @@ from app.models.stages.human_review_queue import (
 )
 from app.runtime.citations import build_row_trace_url
 from app.web.loading import QueueFingerprints, display_cell
+from app.web.span_cells import render_span_cell
 
 @dataclass(frozen=True)
 class ReviewedField:
@@ -110,7 +111,7 @@ class QueuePage:
 def build_queue_page(
     project_id: str, run_id: str, stage_def: WorkflowStage, queue: QueueConfig,
     snapshot: pd.DataFrame | None, fingerprints: QueueFingerprints | None,
-    drift: str | None, closed_note: str | None,
+    drift: str | None, closed_note: str | None, filenames_by_sha256: Mapping[str, str],
 ) -> QueuePage:
     described = describe_queued_columns(stage_def, snapshot)
     lineage = resolve_lineage(stage_def, fingerprints)
@@ -126,7 +127,7 @@ def build_queue_page(
         entries = _load_decided_entries(project_id, stage_def.id, fingerprints.stage_fingerprint)
         items = _build_review_items(
             snapshot, fingerprints, entries, queue, fields,
-            build_lineage_urls(project_id, run_id, lineage, fingerprints),
+            build_lineage_urls(project_id, run_id, lineage, fingerprints), filenames_by_sha256,
         )
     reviewed_count = sum(1 for item in items if item.prior_decision is not None)
     return QueuePage(
@@ -419,10 +420,12 @@ def _build_review_items(
     queue: QueueConfig,
     fields: list[ReviewedField],
     lineage_urls: list[str | None],
+    filenames_by_sha256: Mapping[str, str],
 ) -> list[ReviewItem]:
     # Zipped POSITIONALLY: the snapshot carries no fingerprint column to key on.
     return [
-        _build_review_item(row, fp, entries_by_fingerprint, queue, fields, url)
+        _build_review_item(row, fp, entries_by_fingerprint, queue, fields, url,
+                           filenames_by_sha256)
         for (_, row), fp, url in zip(
             snapshot.iterrows(), fingerprints.input_fingerprints, lineage_urls
         )
@@ -436,13 +439,15 @@ def _build_review_item(
     queue: QueueConfig,
     fields: list[ReviewedField],
     lineage_url: str | None,
+    filenames_by_sha256: Mapping[str, str],
 ) -> ReviewItem:
     entry = entries_by_fingerprint.get(input_fingerprint)
     prior = _display_decision(entry, queue) if entry is not None else None
     displayed_row = {str(k): display_cell(v) for k, v in row.items()}
     return ReviewItem(
         input_fingerprint=input_fingerprint,
-        row={str(name): _as_cell_text(value) for name, value in row.items()},
+        row={str(name): _as_cell_text(value, filenames_by_sha256)
+             for name, value in row.items()},
         lineage_url=lineage_url,
         prior_decision=prior,
         prefill=_build_field_prefills(fields, displayed_row, prior),
@@ -582,10 +587,15 @@ def _require_recorded_output(
 # ── Value spellings ──────────────────────────────────────────────────────────
 
 
-def _as_cell_text(value: object) -> str | None:
+def _as_cell_text(value: object, filenames_by_sha256: Mapping[str, str]) -> str | None:
     # `display_cell` flattens a null to "", so a real empty string would read as nothing.
     if _is_null(value):
         return None
+    # A list[span] cell arrives as a numpy array of dicts.
+    listed = value.tolist() if hasattr(value, "tolist") else value
+    span_text = render_span_cell(listed, filenames_by_sha256)
+    if span_text is not None:
+        return span_text
     displayed = display_cell(value)
     return "" if displayed is None else _as_option_text(displayed)
 

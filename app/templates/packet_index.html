@@ -29,9 +29,14 @@
 
 <p class="banner">📦 <strong>What this is.</strong> Everything this run read, did and produced —
   enough to check the result without the software that made it. Read
-  <a href="methodology.md">methodology.md</a> for what the author set out to do,
+  {% if "methodology.md" in written %}<a href="methodology.md">methodology.md</a> for what the author set out to do,{% endif %}
   {% if guide %}the run walkthrough beside this for what they say is worth scrutinising,{% endif %}
-  then each step for what actually ran.</p>
+  {% if "methodology.md" in written or guide %}then {% endif %}each step for what actually ran.</p>
+
+{% if from_courtlistener %}
+<p class="packet-note">Some files this run read come from CourtListener, a Free Law Project
+  service. Free Law Project did not produce, endorse or verify this run or anything it found.</p>
+{% endif %}
 
 {# What this run's own records say went wrong — the same index the run page carries
    above its graph, and here the packet's only statement of it: a step page shows
@@ -143,12 +148,17 @@
   <h2>Everything else in this folder</h2>
   <table class="stages">
     <tbody>
-      <tr><td><a href="methodology.md">methodology.md</a></td><td>the prose the workflow was compiled from</td></tr>
-      <tr><td><a href="workflow.json">workflow.json</a></td><td>the frozen step definitions this run executed</td></tr>
+      {% if "methodology.md" in written %}<tr><td><a href="methodology.md">methodology.md</a></td><td>the prose the workflow was compiled from, as this run's version kept it</td></tr>{% endif %}
+      {% if "terms.json" in written %}<tr><td><a href="terms.json">terms.json</a></td><td>the row types and verbs, as this run's version kept them</td></tr>{% endif %}
+      {% if "workflow.json" in written %}<tr><td><a href="workflow.json">workflow.json</a></td><td>the frozen step definitions this run executed</td></tr>{% endif %}
       <tr><td><a href="manifest.json">manifest.json</a></td><td>the run's own record: timings, statuses, checks, input bindings</td></tr>
       <tr><td><a href="events.jsonl">events.jsonl</a></td><td>the run event log, including the prompt text sent to the model</td></tr>
-      {% if lineage.traced %}<tr><td><a href="{{ lineage_dir_href }}"><code>lineage/</code></a></td><td>one page per traceable row, and the rows each figure was counted from{% if lineage.stops_short %} — for the {{ lineage.traced | length | figure }} rows closest to the published figures, where the walk back stops{% endif %}</td></tr>{% endif %}
-      <tr><td><code>data/</code></td><td>one CSV per step, uncapped; <code>data/raw/</code> holds the files the run actually wrote</td></tr>
+      {% if "sources.json" in written %}<tr><td><a href="sources.json">sources.json</a></td><td>each file this run read: its stored id, hash, origin, fetch time and copy in <code>inputs/</code></td></tr>{% endif %}
+      {% if "judgments.jsonl" in written %}<tr><td><a href="judgments.jsonl">judgments.jsonl</a></td><td>each model call behind a row this run computed or replayed: what the model was told, asked and answered</td></tr>{% endif %}
+      {% if "spans.json" in written %}<tr><td><a href="spans.json">spans.json</a></td><td>each quote a published table holds, where it sits in its file, and whether it was found there</td></tr>{% endif %}
+      {% if holds_cited_pages %}<tr><td><code>sources/</code></td><td>the text of each page a verified quote sits on, as <code>sources/&lt;id&gt;/pages/&lt;page&gt;.txt</code></td></tr>{% endif %}
+      {% if lineage.traced %}<tr><td><a href="{{ lineage_dir_href }}"><code>lineage/</code></a></td><td>one page per traceable row, and the rows each figure was counted from{% if lineage.stops_short %} — for the {{ lineage.traced | length | figure }} rows closest to the run's results, where the walk back stops{% endif %}</td></tr>{% endif %}
+      <tr><td><code>data/</code></td><td>one CSV per step, uncapped; <code>data/raw/</code> holds the files the run actually wrote, the lineage sidecars among them</td></tr>
       {# The command rides on the row: it was the one thing the page footer carried
          that is written nowhere else, and a hash nobody can check is not evidence. #}
       <tr><td><a href="{{ checksums_href }}">checksums.txt</a></td><td>SHA-256 of every file above — check them with <code>shasum -a 256 -c checksums.txt</code></td></tr>

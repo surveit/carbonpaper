@@ -15,6 +15,7 @@ from app.models.stages.input_data import STAGE_TYPE_SPECS as _INPUT_DATA
 from app.models.stages.join import STAGE_TYPE_SPECS as _JOIN
 from app.models.stages.llm_transform import STAGE_TYPE_SPECS as _LLM_TRANSFORM
 from app.models.stages.stage_type_spec import StageTypeSpec
+from app.models.stages.read_pages import STAGE_TYPE_SPECS as _READ_PAGES
 from app.models.stages.report import STAGE_TYPE_SPECS as _REPORT
 from app.models.stages.sort_rank import STAGE_TYPE_SPECS as _SORT_RANK
 from app.models.stages.starlark import STAGE_TYPE_SPECS as _STARLARK
@@ -38,6 +39,7 @@ STAGE_TYPES: dict[str, StageTypeSpec] = {
     **_EXPLODE,
     **_DEDUPE,
     **_SORT_RANK,
+    **_READ_PAGES,
 }
 
 # Types a project may use only after its owner has approved unsandboxed code

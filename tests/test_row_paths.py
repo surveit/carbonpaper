@@ -131,7 +131,7 @@ def test_a_path_names_the_code_arm_its_rows_took(scoped):
 def test_the_packet_sends_a_path_to_that_rows_own_page(scoped):
     """A folder has no query string to re-tell the walk, so the link is the row's page."""
     behind = _behind(scoped, "by_portfolio", _HEALTH)
-    links = PacketPanelLinks(to_root="../")
+    links = PacketPanelLinks(to_root="../", stage_pages=frozenset())
 
     assert [links.build_row_trace_for_figure("by_portfolio", _HEALTH, path.sample_choices)
             for path in behind.paths] == [

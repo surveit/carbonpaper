@@ -15,8 +15,11 @@ from pydantic import BaseModel
 from app.core.agent.agent import Agent
 from app.core.agent.usage import LlmUsage
 from app.core.errors import LLMError, StageWideFailure
+from app.core.json_types import JsonDict
+from app.core.judgments import JudgmentDraft
 from app.core.llm_sdk import run_sync
 from app.core.agent.sdk_engine import ThinkingConfig
+from app.core.timestamp_ids import now_iso
 from app.models.stages.llm_transform import LLMConfig, ThinkingMode
 
 from .options import (
@@ -62,7 +65,9 @@ _LLM_EVENT_KINDS = {
 SYSTEM_PROMPT = (
     "You are executing one transform step of a data pipeline. Work from the "
     "task input you are given. Produce the required output by calling the "
-    "submit_answer tool exactly once; its input schema is the required reply."
+    "submit_answer tool exactly once; its input schema is the required reply. "
+    "A quote is copied verbatim from the text shown, never paraphrased: the runtime looks "
+    "for those exact words there and sends back a reply whose quote it cannot find."
 )
 
 
@@ -84,11 +89,14 @@ def call_llm(
     reply_model: type[BaseModel],
     model: str | None = None,
     usage_out: list[LlmUsage] | None = None,
-) -> dict[str, Any]:
+    correction: str | None = None,
+) -> JudgmentDraft:
     """`usage_out` collects EVERY attempt's usage, failed ones included — those tokens were spent."""
     if not llm_config.prompt_data_template:
         raise LLMError(f"stage {stage_id}: llm_transform has no prompt_data_template")
     task = render_prompt(llm_config.prompt_data_template, input_row)
+    if correction is not None:
+        task += f"\n\nYour previous reply was rejected: {correction}"
     model_name = str(model or llm_config.model or DEFAULT_MODEL)
     return _run_agent(
         _compose_system(llm_config.prompt_instructions), task, reply_model, model_name,
@@ -106,7 +114,7 @@ def call_llm_batch(
     reply_schema: type[BaseModel],
     model: str | None = None,
     usage_out: list[LlmUsage] | None = None,
-) -> dict[str, Any]:
+) -> JudgmentDraft:
     model_name = str(model or llm_config.model or DEFAULT_MODEL)
     # No tools by construction: LLMConfig refuses tools with batch_size > 1.
     return _run_agent(
@@ -134,7 +142,32 @@ def _run_agent(
     usage_out: list[LlmUsage] | None,
     tools: list[str] | None = None,
     thinking: ThinkingMode | None = None,
-) -> dict[str, Any]:
+) -> JudgmentDraft:
+    spent: list[LlmUsage] = []
+    try:
+        reply = _ask_agent(
+            system_prompt, task, target_schema, model_name, max_retries, spent,
+            tools=tools, thinking=thinking,
+        )
+    finally:
+        if usage_out is not None:
+            usage_out.extend(spent)
+    return JudgmentDraft(
+        system_prompt=system_prompt, task=task, model=model_name, reply=reply,
+        usage=LlmUsage.summed(spent), decided_at=now_iso(),
+    )
+
+
+def _ask_agent(
+    system_prompt: str,
+    task: str,
+    target_schema: type[BaseModel],
+    model_name: str,
+    max_retries: int,
+    usage_out: list[LlmUsage],
+    tools: list[str] | None = None,
+    thinking: ThinkingMode | None = None,
+) -> JsonDict:
     require_agent_backend()
     emit_llm_detail(LLM_PROMPT, text=task)
     # Captured HERE, on the caller's own thread, so it survives the thread hop
@@ -212,8 +245,8 @@ def _forward_agent_events(
 
 
 def _record_usage(
-    usage_out: list[LlmUsage] | None, agent: Agent[BaseModel], model_name: str
+    usage_out: list[LlmUsage], agent: Agent[BaseModel], model_name: str
 ) -> None:
     """`model_name` is stamped here because this is where `model or llm.model or DEFAULT_MODEL` resolved."""
-    if usage_out is not None and agent.last_usage is not None:
+    if agent.last_usage is not None:
         usage_out.append(agent.last_usage.model_copy(update={"model": model_name}))

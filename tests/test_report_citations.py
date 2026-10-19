@@ -154,7 +154,7 @@ def _report_stage(code: str) -> Stage:
 def _run_publish(code: str, tmp_path):
     ctx = RunContext.for_workflow_run(
         run_dir=tmp_path / "run",
-        project_id="venezuela_lda_lobbying", run_id="R1",
+        project_id="venezuela_lda_lobbying", run_id="R1", bound_sources={},
     )
     return handle_report(
         place_stage(_report_stage(code)), as_inputs({"count_in_house_figures": _IN_HOUSE}), ctx

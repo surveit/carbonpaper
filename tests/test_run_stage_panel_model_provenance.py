@@ -13,7 +13,7 @@ import app.services.workspace as workspace
 from app.core.agent.usage import LlmUsage
 from app.main import app
 from app.runtime.runner import execute_run
-from conftest import pinned_stages
+from conftest import pinned_stages, script_judgment
 from stage_seed import add_stage, save_version
 
 PROJECT = "model_provenance_panel"
@@ -61,8 +61,8 @@ def _build_project(
 
     def fake_call_llm_batch(stage_id, llm, *, instructions, task, reply_schema, usage_out):
         usage_out.append(LlmUsage(cost_usd=0.25, calls=1, model=answered))
-        return {"results": [{"row_number": n, "verdict": f"v{n}"}
-                            for n in range(task.count("### item "))]}
+        return script_judgment({"results": [{"row_number": n, "verdict": f"v{n}"}
+                                            for n in range(task.count("### item "))]})
 
     monkeypatch.setattr(
         "app.runtime.stages.llm_transform.call_llm_batch", fake_call_llm_batch)
