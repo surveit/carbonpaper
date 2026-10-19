@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS amendments (
 
 CREATE TABLE IF NOT EXISTS orgs (
     org_id         TEXT PRIMARY KEY,
-    canonical_name TEXT NOT NULL UNIQUE,
+    resolved_name TEXT NOT NULL UNIQUE,
     sector         TEXT NOT NULL CHECK (sector IN ('industry','advocacy','government','individual','unknown'))
 );
 

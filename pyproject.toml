@@ -101,13 +101,12 @@ root_packages = ["app", "docket"]
 [[tool.importlinter.contracts]]
 # `docket` is a standalone research pipeline that happens to live here: it reads public
 # registers and writes its own SQLite warehouse, sharing no runtime with the product.
-# The direction that would drift silently is app reaching INTO it — a service borrowing a
-# parser, and the app suddenly depending on a pipeline nobody deploys. Nothing in a diff
-# announces that.
-name = "app does not depend on the docket pipeline"
-type = "forbidden"
-source_modules = ["app"]
-forbidden_modules = ["docket"]
+# Nothing in the app may reach into it, and an empty allowed_importers denies a package
+# added next year too — which a forbidden list would have let through.
+name = "docket imported by nothing — it is a standalone pipeline"
+type = "protected"
+protected_modules = ["docket"]
+allowed_importers = []
 
 [[tool.importlinter.contracts]]
 name = "app.web imported only by the entrypoint"

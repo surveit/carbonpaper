@@ -72,11 +72,11 @@ def resolve_org(connection: sqlite3.Connection, raw_name: str) -> str:
     ).fetchone()
     if existing:
         return existing[0]
-    canonical = _canonical_name(alias)
-    identifier = hashlib.sha1(canonical.encode()).hexdigest()[:12]
+    resolved = _resolve_name(alias)
+    identifier = hashlib.sha1(resolved.encode()).hexdigest()[:12]
     connection.execute(
         "INSERT OR IGNORE INTO orgs VALUES (?, ?, ?)",
-        (identifier, canonical, classify_sector(canonical)),
+        (identifier, resolved, classify_sector(resolved)),
     )
     connection.execute(
         "INSERT OR REPLACE INTO org_aliases VALUES (?, ?)", (alias, identifier)
@@ -125,7 +125,7 @@ def load_rule_documents(
     return counts
 
 
-def _canonical_name(raw: str) -> str:
+def _resolve_name(raw: str) -> str:
     without_parens = _PARENS.sub(" ", raw)
     without_suffix = _LEGAL_SUFFIX.sub(" ", without_parens)
     cleaned = re.sub(r"[^A-Za-z0-9 &]", " ", without_suffix)
