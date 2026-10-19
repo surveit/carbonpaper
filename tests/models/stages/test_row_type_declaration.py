@@ -23,6 +23,7 @@ _DECLARES_ITS_OWN_ROW_TYPE = {
     StageType.expand: True,
     StageType.python_frame_function: True,
     StageType.report: True,
+    StageType.starlark_report: True,
     StageType.enrich: False,
     StageType.filter_rows: False,
     StageType.human_review_queue: False,

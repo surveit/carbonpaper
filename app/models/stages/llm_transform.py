@@ -21,25 +21,13 @@ if TYPE_CHECKING:
     from app.models.workflow_stage import WorkflowStageInput
 
 
-# Tool names an `llm_transform` stage may be granted, so a stage can RESEARCH — look
-# a claim up on the open web, read the document behind it, extract text from a PDF —
-# instead of answering only from the row in front of it.
-#
-# This set exists to catch TYPOS, not to police capability: `websearch` silently
-# granting nothing is a bad failure, so an unknown name is refused loudly. What a
-# stage should be trusted with is the pipeline author's call, not this module's.
-#
-# Granting any of these has a real consequence worth stating once: the stage's output
-# stops being a pure function of its input row, so re-running it need not reproduce
-# the same answer, and the stage cache cannot be relied on to stand in for a re-run.
-# `Bash` in particular buys document extraction (pdftotext and friends) at the price
-# of a stage that can run arbitrary commands. That trade is the author's to make.
-#
-# `Write` and `Edit` are not here yet — not as a judgement, just as an unmade
-# decision. Nothing about the plumbing stops them being added.
-GRANTABLE_TOOLS: frozenset[str] = frozenset({
-    "WebSearch", "WebFetch", "Bash", "Read", "Grep", "Glob",
+# What a STORED stage may carry: the typo check, not the grant list.
+KNOWN_TOOL_NAMES: frozenset[str] = frozenset({
+    "WebSearch", "WebFetch", "Bash",
 })
+
+# What a NEW stage may ask for; app.services.stage_edit refuses the rest.
+GRANTABLE_TOOLS: frozenset[str] = frozenset({"WebSearch", "WebFetch"})
 
 
 # How much the model reasons before it answers. A LEVEL, not a token budget:
@@ -82,7 +70,7 @@ class LLMConfig(StageConfig):
     tools: Optional[list[str]] = Field(
         default=None,
         description=(
-            "Tools this stage may use, from GRANTABLE_TOOLS. Omit for a stage that "
+            "Tools this stage may use: `WebSearch`, `WebFetch`. Omit for a stage that "
             "should answer only from its input row. A stage with tools is slower, "
             "costs materially more per row, and its output is NOT reproducible from "
             "the row alone."
@@ -115,13 +103,13 @@ class LLMConfig(StageConfig):
     def _tools_are_known_names(self) -> "LLMConfig":
         if not self.tools:
             return self
-        unknown = sorted(set(self.tools) - GRANTABLE_TOOLS)
+        unknown = sorted(set(self.tools) - KNOWN_TOOL_NAMES)
         if unknown:
             # Typo protection: a misspelled name would otherwise grant nothing and
             # leave the stage quietly unable to do the work it was authored to do.
             raise ValueError(
                 f"llm.tools: unknown tool name(s) {unknown}; known names are "
-                f"{sorted(GRANTABLE_TOOLS)} (names are case-sensitive)."
+                f"{sorted(KNOWN_TOOL_NAMES)} (names are case-sensitive)."
             )
         if self.batch_size > 1:
             # Batch-mates share one context, so one row's research would contaminate

@@ -14,10 +14,14 @@ from app.core.json_types import JsonDict
 from app.core.llm import LLMModel
 from app.models.stages.aggregate import RETIRED_FORMULAS
 from app.models.stages.stage_base import StageType
-from app.models.stages.stage_types import APPROVAL_REQUIRED_TYPES
+from app.models.stages.stage_types import (
+    APPROVAL_REQUIRED_TYPES,
+    SANDBOXED_COUNTERPART,
+)
 from app.services.code_approval import has_code_execution_approval
 from app.models import StageDraft, StageEdit
 from app.models.stages.code import SUMMARY_MAX_CHARS
+from app.models.stages.llm_transform import GRANTABLE_TOOLS
 from app.models.workflow import (
     detect_cycle,
     sort_stages_by_dependency,
@@ -109,10 +113,7 @@ CODE_EXECUTION_REFUSAL = (
     "Paper is not built for arbitrary code execution — a Python step runs on the "
     "machine hosting this project, with its permissions: it can read files, reach the "
     "network and install packages, and nothing here inspects what it does.{trace_cost}\n"
-    "Most of what this type is used for no longer needs it: `explode` unpacks a list "
-    "column into rows and a `starlark_row_function` after it can do the per-row work "
-    "sandboxed; `dedupe`, `sort_rank`, `aggregate`, `enrich`, `expand` and `union` cover "
-    "the rest of the reshapes. Try those first.\n"
+    "{write_this_instead}"
     "If this genuinely needs Python, tell the project's owner what it will do and why no "
     "declared stage fits, and ask whether to turn code execution on for this project. "
     "Only once THEY have answered yes, call `approve_code_execution`."
@@ -124,6 +125,29 @@ _FRAME_FUNCTION_TRACE_COST = (
     " It also reshapes the table opaquely, so a trace stops at it and a published "
     "figure cannot be walked back to the rows behind it."
 )
+
+
+COUNTERPART_CLAUSE = (
+    "`{counterpart}` does this same job sandboxed — no files, no network, no libraries — "
+    "and needs no approval at all. Write that instead unless this step genuinely needs "
+    "something only Python has.\n"
+)
+
+
+# The one withheld type with no sandboxed counterpart to point at.
+FRAME_FUNCTION_ALTERNATIVES = (
+    "Most of what this type is used for no longer needs it: `explode` unpacks a list "
+    "column into rows and a `starlark_row_function` after it can do the per-row work "
+    "sandboxed; `dedupe`, `sort_rank`, `aggregate`, `enrich`, `expand` and `union` cover "
+    "the rest of the reshapes. Try those first.\n"
+)
+
+
+def say_what_to_write_instead(stage_type: str) -> str:
+    counterpart = SANDBOXED_COUNTERPART.get(stage_type)
+    if counterpart is None:
+        return FRAME_FUNCTION_ALTERNATIVES
+    return COUNTERPART_CLAUSE.format(counterpart=counterpart)
 
 
 def find_unapproved_code_issues(
@@ -146,7 +170,8 @@ def find_unapproved_code_issues(
         if stage_type == StageType.python_frame_function else ""
     )
     return [CODE_EXECUTION_REFUSAL.format(
-        sid=candidate.get("id"), stage_type=stage_type, trace_cost=trace_cost)]
+        sid=candidate.get("id"), stage_type=stage_type, trace_cost=trace_cost,
+        write_this_instead=say_what_to_write_instead(str(stage_type)))]
 
 
 AGGREGATION_WHERE_REFUSAL = (
@@ -183,6 +208,37 @@ def find_aggregation_issues(candidate: dict) -> list[str]:
     return issues
 
 
+UNGRANTABLE_TOOL_REFUSAL = (
+    "stage '{sid}': `llm.tools` asks for {ungrantable}, which a stage may no longer be "
+    "granted. A research stage looks a claim up on the open web and reads the document "
+    "behind it — {grantable} do that. `Bash` went further: it ran commands on the "
+    "machine hosting this project, which is the thing a sandboxed pipeline is for not "
+    "doing, and nothing here inspected what it ran.\n"
+    "If this step needs the text inside a document, fetch the document and ask the model "
+    "to read it, or extract the text in a stage upstream."
+)
+
+
+def find_ungrantable_tool_issues(candidate: dict, stored: dict[str, dict] | None = None) -> list[str]:
+    """Gates GRANTING one, never maintaining a stage that already holds it."""
+    asked = _list_asked_tools(candidate)
+    already = _list_asked_tools((stored or {}).get(candidate.get("id", ""), {}))
+    ungrantable = sorted((asked - GRANTABLE_TOOLS) - already)
+    if not ungrantable:
+        return []
+    return [UNGRANTABLE_TOOL_REFUSAL.format(
+        sid=candidate.get("id"),
+        ungrantable=", ".join(f"`{name}`" for name in ungrantable),
+        grantable=" and ".join(f"`{name}`" for name in sorted(GRANTABLE_TOOLS)),
+    )]
+
+
+def _list_asked_tools(candidate: dict) -> set[str]:
+    llm = candidate.get("llm")
+    tools = llm.get("tools") if isinstance(llm, dict) else None
+    return set(tools) if isinstance(tools, list) else set()
+
+
 def find_unnamed_model_issues(candidate: dict) -> list[str]:
     """Enforced on write, not on the model — on load it would refuse every llm stage stored before."""
     llm = candidate.get("llm")
@@ -211,6 +267,7 @@ def _apply(project_id: str, draft_id: str, specs: dict[str, JsonDict], candidate
         issues += find_unnamed_model_issues(candidate)
         issues += find_unapproved_code_issues(project_id, candidate, specs)
         issues += find_aggregation_issues(candidate)
+        issues += find_ungrantable_tool_issues(candidate, specs)
     if issues:
         return EditStageResult(ok=False, issues=issues)
 

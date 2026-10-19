@@ -29,6 +29,9 @@ _ALLOWED_WRITERS: dict[str, str] = {
     "app/web/review_packet/pages.py": "builds a downloadable review packet",
     "app/web/review_packet/lineage.py": "builds a downloadable review packet",
 
+    # 2b. The artifact a report stage publishes — sandboxed code reaches disk only here.
+    "app/runtime/artifacts.py": "writes the files a report stage publishes",
+
     # 3. A file the user handed us. Raw bytes we did not author and must not
     # reinterpret — an input CSV, an eval dataset.
     "app/core/files.py": "stages and content-addresses an uploaded data file",

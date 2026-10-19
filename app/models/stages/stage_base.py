@@ -81,7 +81,9 @@ class StageType(str, Enum):
     expand = "expand"
     aggregate = "aggregate"
     human_review_queue = "human_review_queue"
+    # Two artifact writers: starlark_report writes through builtins, report host Python.
     report = "report"
+    starlark_report = "starlark_report"
     # Both preserve exact per-row PROVENANCE (each output row traces to one
     # specific input row) but neither is grain-and-order preserving BY
     # POSITION: filter_rows drops rows, union interleaves rows from several
@@ -130,7 +132,7 @@ def find_row_effect(stage_type: StageType) -> RowEffect:
               | StageType.expand | StageType.python_frame_function):
             return RowEffect.builds
         # Reads the rows and emits none.
-        case StageType.report:
+        case StageType.report | StageType.starlark_report:
             return RowEffect.consumes
     # mypy names the unclassified type here, so a new one cannot default its way in.
     assert_never(stage_type)

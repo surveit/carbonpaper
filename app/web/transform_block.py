@@ -31,7 +31,7 @@ def name_transform_block(stage: AbstractStage) -> str:
             return "sort_rank"
         case (StageType.python_row_function | StageType.python_frame_function
               | StageType.starlark_row_function | StageType.starlark_filter_rows
-              | StageType.filter_rows):
+              | StageType.filter_rows | StageType.starlark_report):
             # No config section: the block itself draws these (_stage_code.html).
             return "code"
     assert_never(stage.type)

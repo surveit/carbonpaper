@@ -28,6 +28,7 @@ TYPE_CLASS = {
     "aggregate": "aggregate",
     "human_review_queue": "human",
     "report": "report",
+    "starlark_report": "report",
     # Row-set operations: union stacks frames, filter_rows drops subject rows.
     "union": "rowset",
     "filter_rows": "rowset",
@@ -48,6 +49,7 @@ TYPE_GLYPH = {
     "aggregate": "📊",
     "human_review_queue": "👤",
     "report": "📤",
+    "starlark_report": "🛡️📤",
     "union": "➕",
     "filter_rows": "⚠️",
     "explode": "🌱",
@@ -72,6 +74,7 @@ TYPE_LABEL = {
     "aggregate": "aggregate",
     "human_review_queue": "review queue",
     "report": "report",
+    "starlark_report": "sandboxed report",
     "union": "union",
     "filter_rows": "dangerously filter rows",
     "explode": "explode",
