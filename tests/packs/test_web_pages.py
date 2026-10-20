@@ -302,4 +302,4 @@ def test_every_request_names_carbon_paper_as_user_agent(site: _Site) -> None:
     _run([site.base + "/article.html", site.base + "/missing"])
 
     assert len(site.agents) == 2
-    assert all("carbonpaper" in agent for agent in site.agents)
+    assert site.agents == ["carbon-paper (+https://github.com/surveit/carbonpaper)"] * 2

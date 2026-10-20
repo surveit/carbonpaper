@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import io
 import re
-import tempfile
 from collections.abc import Hashable, Iterator, Mapping
 from dataclasses import dataclass
 from http.client import HTTPException, HTTPResponse
@@ -18,7 +17,7 @@ from pypdf.errors import PyPdfError
 from app.core.errors import SourceUnavailable
 from app.core.files import max_upload_bytes
 from app.core.source_files import read_source_file, resolve_file_format
-from app.core.text_sources import read_every_page_text
+from app.core.text_sources import read_every_page_text_from_bytes
 from app.core.url_fetch import open_url
 from app.models.base import _Base
 from app.models.connectors import (
@@ -26,8 +25,8 @@ from app.models.connectors import (
 )
 from app.models.schema import Column
 
-USER_AGENT = "carbonpaper (https://github.com/surveit/carbonpaper)"
-_TIMEOUT_S = 30
+USER_AGENT = "carbon-paper (+https://github.com/surveit/carbonpaper)"
+_TIMEOUT_S = 60
 _CHUNK_BYTES = 1 << 16
 _PDF_MAGIC = b"%PDF-"
 _SUFFIX_BY_CONTENT_TYPE = {"text/html": ".html", "text/plain": ".txt"}
@@ -152,13 +151,10 @@ def _judge_text(body: bytes, suffix: str, params: WebPagesParams) -> str:
 
 def _measure_text_length(body: bytes, suffix: str) -> int | None:
     """The characters read_pages will see; None when the reader cannot open the bytes."""
-    with tempfile.TemporaryDirectory() as directory:
-        with tempfile.NamedTemporaryFile(dir=directory, suffix=suffix, delete=False) as staged:
-            staged.write(body)
-        try:
-            return len("".join(read_every_page_text(Path(staged.name))).strip())
-        except (PyPdfError, ValueError):  # ValueError covers UnicodeDecodeError
-            return None
+    try:
+        return len("".join(read_every_page_text_from_bytes(body, suffix)).strip())
+    except (PyPdfError, ValueError):  # ValueError covers UnicodeDecodeError
+        return None
 
 
 def _name_file(index: int, entry: UrlEntry, suffix: str) -> str:

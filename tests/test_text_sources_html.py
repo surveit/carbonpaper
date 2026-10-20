@@ -2,8 +2,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from app.core.files import compute_sha256
-from app.core.text_sources import read_page_text
+from app.core.errors import UnsupportedTextFormat
+from app.core.text_sources import (
+    read_every_page_text, read_every_page_text_from_bytes, read_page_text,
+)
+from pdf_fixture import write_text_pdf
 from app.models.locators import PageCharRange
 from app.models.run_manifest import InputBinding
 from app.models.spans import Span
@@ -67,3 +73,29 @@ def test_a_span_quoted_from_article_text_verifies(tmp_path: Path) -> None:
         stage_id="load", path=str(path), filename="news.html", sha256=sha, file_id="news")
     sources = {sha: binding}
     assert find_span_refusal(span, sources, SourceTextCache()) is None
+
+
+def test_bytes_reader_matches_the_path_reader_for_html_txt_and_md(tmp_path: Path) -> None:
+    html = tmp_path / "news.html"
+    _write_article(html)
+    plain = "Plain text. " * 10
+    for name, body in ((html.name, html.read_bytes()), ("a.txt", plain.encode()),
+                       ("a.md", plain.encode())):
+        path = tmp_path / name
+        path.write_bytes(body)
+        assert list(read_every_page_text_from_bytes(body, path.suffix)) == list(
+            read_every_page_text(path))
+
+
+def test_bytes_reader_matches_the_path_reader_for_a_pdf(tmp_path: Path) -> None:
+    path = write_text_pdf(tmp_path / "a.pdf", ["First page.", "Second page."])
+
+    pages = list(read_every_page_text_from_bytes(path.read_bytes(), ".PDF"))
+
+    assert pages == list(read_every_page_text(path))
+    assert len(pages) == 2
+
+
+def test_bytes_reader_refuses_an_unsupported_suffix() -> None:
+    with pytest.raises(UnsupportedTextFormat, match=r"\.png"):
+        read_every_page_text_from_bytes(b"x", ".png")

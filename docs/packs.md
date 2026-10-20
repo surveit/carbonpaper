@@ -78,7 +78,7 @@ Give exactly one of `urls` and `url_table`; a URL listed twice refuses the run, 
 whose page was read carries the stored file (named `<key>.<suffix>`, or the URL's position in the
 list when it has no key); a row whose page was not has no file and `fetch_status` says why. The
 metadata columns are `url_key`, `requested_url`, `final_url` (after redirects), `content_type`,
-`http_status` and `fetch_status`. Each request waits up to 30 seconds and sends the user agent in
+`http_status` and `fetch_status`. Each request waits up to 60 seconds and sends the user agent in
 `app/packs/web/connector.py`. A 429 is waited out as in the opinions pack.
 
 | `fetch_status` | Meaning | File stored |

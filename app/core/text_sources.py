@@ -1,6 +1,7 @@
 """Page text of a file: a PDF page by page through pypdf; a txt, md or html file is one page."""
 from __future__ import annotations
 
+import io
 import unicodedata
 from collections.abc import Callable, Iterator
 from pathlib import Path
@@ -33,14 +34,22 @@ def read_page_text(path: Path, page: int) -> str:
         return pages[page - 1].extract_text()
     read_one_page = _resolve_one_page_reader(path)
     _require_page_in_range(path, page, 1)
-    return read_one_page(path)
+    return read_one_page(path.read_bytes())
 
 
 def read_every_page_text(path: Path) -> Iterator[str]:
     """Page 1 first, from one open of the file."""
     if _is_pdf(path):
         return (page.extract_text() for page in PdfReader(path).pages)
-    return iter([_resolve_one_page_reader(path)(path)])
+    return iter([_resolve_one_page_reader(path)(path.read_bytes())])
+
+
+def read_every_page_text_from_bytes(body: bytes, suffix: str) -> Iterator[str]:
+    """Same pages as read_every_page_text on a file of these bytes named `*suffix`."""
+    name = f"(bytes){suffix}"
+    if suffix.lower() == _PDF_SUFFIX:
+        return (page.extract_text() for page in PdfReader(io.BytesIO(body)).pages)
+    return iter([_resolve_one_page_reader(Path(name))(body)])
 
 
 def normalize_text(text: str) -> str:
@@ -105,7 +114,7 @@ def _require_page_in_range(path: Path, page: int, page_count: int) -> None:
         raise PageOutOfRange(f"page {page} of a {page_count}-page {path.name}")
 
 
-def _resolve_one_page_reader(path: Path) -> Callable[[Path], str]:
+def _resolve_one_page_reader(path: Path) -> Callable[[bytes], str]:
     _require_one_page_reader(path)
     return _ONE_PAGE_READERS[path.suffix.lower()]
 
@@ -116,18 +125,22 @@ def _require_one_page_reader(path: Path) -> None:
         raise UnsupportedTextFormat(f"{path.name}: page text is read only from {readable}")
 
 
-def _read_utf8_text(path: Path) -> str:
-    return path.read_text(encoding="utf-8")
+def _read_utf8_text(body: bytes) -> str:
+    # Universal newlines, as Path.read_text gave, so stored span offsets keep their meaning.
+    return body.decode("utf-8").replace("
+", "
+").replace("", "
+")
 
 
-def _read_html_text(path: Path) -> str:
+def _read_html_text(body: bytes) -> str:
     extracted = trafilatura.extract(
-        path.read_bytes(), include_comments=False, include_tables=True, favor_precision=True,
+        body, include_comments=False, include_tables=True, favor_precision=True,
         no_fallback=True)
     return "" if extracted is None else extracted
 
 
-_ONE_PAGE_READERS: dict[str, Callable[[Path], str]] = {
+_ONE_PAGE_READERS: dict[str, Callable[[bytes], str]] = {
     ".txt": _read_utf8_text,
     ".md": _read_utf8_text,
     ".html": _read_html_text,
