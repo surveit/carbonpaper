@@ -27,6 +27,7 @@ dependencies = [
     "pydantic>=2",             # stage/schema contract models (app/models)
     "starlark-pyo3==2026.1",   # sandboxed interpreter for starlark_row_function stages
     "pypdf>=6.19.0",           # PDF page text (app/core/text_sources.py); BSD, where PyMuPDF is AGPL
+    "trafilatura>=2.3.1",      # HTML article text (app/core/text_sources.py); Apache-2.0, compatible with this repo's MIT
 ]
 
 # Dev/test-only. `uv sync` installs these by default; the container image passes

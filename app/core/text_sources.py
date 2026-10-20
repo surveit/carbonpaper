@@ -3,17 +3,17 @@ from __future__ import annotations
 
 import unicodedata
 from collections.abc import Callable, Iterator
-from html.parser import HTMLParser
 from pathlib import Path
 from typing import NamedTuple
 
+import trafilatura
 from pypdf import PdfReader
 
 from app.core.errors import PageOutOfRange, UnsupportedTextFormat
 
 _PDF_SUFFIX = ".pdf"
 _SOFT_HYPHEN = "\u00ad"
-_UNRENDERED_HTML_TAGS = frozenset({"script", "style"})
+
 
 
 def count_pages(path: Path) -> int:
@@ -121,29 +121,10 @@ def _read_utf8_text(path: Path) -> str:
 
 
 def _read_html_text(path: Path) -> str:
-    parser = _HtmlTextParser()
-    parser.feed(_read_utf8_text(path))
-    parser.close()
-    return "".join(parser.chunks)
-
-
-class _HtmlTextParser(HTMLParser):
-    def __init__(self) -> None:
-        super().__init__()
-        self.chunks: list[str] = []
-        self._inside_unrendered_tag = False
-
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag in _UNRENDERED_HTML_TAGS:
-            self._inside_unrendered_tag = True
-
-    def handle_endtag(self, tag: str) -> None:
-        if tag in _UNRENDERED_HTML_TAGS:
-            self._inside_unrendered_tag = False
-
-    def handle_data(self, data: str) -> None:
-        if not self._inside_unrendered_tag:
-            self.chunks.append(data)
+    extracted = trafilatura.extract(
+        path.read_bytes(), include_comments=False, include_tables=True, favor_precision=True,
+        no_fallback=True)
+    return "" if extracted is None else extracted
 
 
 _ONE_PAGE_READERS: dict[str, Callable[[Path], str]] = {
