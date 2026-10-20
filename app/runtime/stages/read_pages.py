@@ -44,7 +44,8 @@ def handle_read_pages(
     sources = inputs[input_id]
     pages: list[_Page] = []
     warnings: list[str] = []
-    for ordinal, (source_id, source_sha256) in enumerate(_iter_source_ids_and_sha256s(sources)):
+    for ordinal, (found_id, found_sha256) in enumerate(_iter_source_ids_and_sha256s(sources)):
+        source_id, source_sha256 = _require_a_file(stage.id, ordinal, found_id, found_sha256)
         binding = _require_bound_file(ctx, source_id, source_sha256)
         texts = ctx.source_texts.read_every_page_text(Path(binding.path), source_sha256)
         read = _build_pages(ordinal, source_id, source_sha256, texts)
@@ -57,9 +58,21 @@ def handle_read_pages(
     )
 
 
-def _iter_source_ids_and_sha256s(sources: pa.Table) -> Iterator[tuple[str, str]]:
+def _iter_source_ids_and_sha256s(
+    sources: pa.Table,
+) -> Iterator[tuple[str | None, str | None]]:
     return zip(sources.column(SOURCE_ID_COLUMN).to_pylist(),
                sources.column(SOURCE_SHA256_COLUMN).to_pylist())
+
+
+def _require_a_file(
+    stage_id: str, ordinal: int, source_id: str | None, source_sha256: str | None,
+) -> tuple[str, str]:
+    if source_id is None or source_sha256 is None:
+        raise SourceNotRead(
+            f"{stage_id}: source row {ordinal} reached no file, so it has no pages to read; "
+            "filter on fetch_status (or source_id) before reading pages")
+    return source_id, source_sha256
 
 
 def _require_bound_file(ctx: RunContext, source_id: str, source_sha256: str) -> InputBinding:

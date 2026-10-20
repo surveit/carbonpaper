@@ -32,7 +32,7 @@ from app.models import (
 )
 from app.models.connectors import (
     SOURCE_ID_COLUMN, SOURCE_SHA256_COLUMN, AcquiredBytes, ConnectorSpec, MetadataValue,
-    MirroredBytes, find_connector,
+    MirroredBytes, UnreachedSource, find_connector,
 )
 from app.models.run_manifest import ReadFile, StageInputRecord
 from app.models.stage_contribution import StageContribution
@@ -109,8 +109,9 @@ def read_input_data(workflow_stage: WorkflowStage, ctx: RunContext) -> StageOutp
 
 
 class _Source(NamedTuple):
-    record: ProjectFile
+    record: ProjectFile | None
     metadata: Mapping[str, MetadataValue]
+    requested_url: str | None = None
 
 
 @dataclass(frozen=True)
@@ -134,9 +135,9 @@ def acquire_input_data(
     if isinstance(stage.connector.params, FileConnectorParams):
         return None
     sources = _find_sources(stage, find_connector(stage.connector.kind), scope.project_id)
+    reached = [source.record for source in sources if source.record is not None]
     return AcquiredStage(
-        record=StageInputRecord(
-            files=[_weigh_file(resolve_stored_path(source.record)) for source in sources]),
+        record=StageInputRecord(files=[_weigh_file(resolve_stored_path(r)) for r in reached]),
         source_table=table_from_rows([_build_source_row(source) for source in sources]),
         table_path=_resolve_source_table_path(scope.run_dir, stage.id),
     )
@@ -153,17 +154,22 @@ def _find_sources(
                 for path in params.paths]
     sources = [_receive(acquired, connector, project_id)
                for acquired in connector.acquire(params)]
-    if not sources:
+    if not any(source.record for source in sources):
         raise SourceUnavailable(f"connector {connector.kind!r} acquired no file")
     return sources
 
 
-def _receive(acquired: AcquiredBytes, connector: ConnectorSpec[Any], project_id: ID) -> _Source:
+def _receive(
+    acquired: AcquiredBytes | UnreachedSource, connector: ConnectorSpec[Any], project_id: ID,
+) -> _Source:
     declared = {column.name for column in connector.metadata_columns}
+    name = acquired.requested_url if isinstance(acquired, UnreachedSource) else acquired.filename
     if set(acquired.metadata) != declared:
         raise ValueError(
-            f"connector {connector.kind!r} gave '{acquired.filename}' metadata "
+            f"connector {connector.kind!r} gave '{name}' metadata "
             f"{sorted(acquired.metadata)}, but declares {sorted(declared)}")
+    if isinstance(acquired, UnreachedSource):
+        return _Source(None, acquired.metadata, acquired.requested_url)
     with acquired.open_bytes() as stream:
         record = (
             receive_mirrored_source(
@@ -185,6 +191,9 @@ def _require_stored(path: Path, project_id: ID) -> ProjectFile:
 
 def _build_source_row(source: _Source) -> dict[str, MetadataValue]:
     record = source.record
+    if record is None:
+        return {SOURCE_ID_COLUMN: None, SOURCE_SHA256_COLUMN: None, "filename": None,
+                "origin_url": source.requested_url, "fetched_at": None, **source.metadata}
     return {SOURCE_ID_COLUMN: record.id, SOURCE_SHA256_COLUMN: record.sha256,
             "filename": record.filename, "origin_url": record.origin_url,
             "fetched_at": record.fetched_at, **source.metadata}
@@ -208,14 +217,18 @@ def _read_source_table(workflow_stage: WorkflowStage, ctx: RunContext) -> StageO
 
 
 def _which_source_each_row_came_from(stage_id: str, table: pa.Table, ctx: RunContext) -> RowLineage:
-    """A row IS its file, so its parent is row 0 of the file this run read for it."""
-    read = [require_bound_file(source_id, sha256, ctx.bound_sources)
-            for source_id, sha256 in zip(table.column(SOURCE_ID_COLUMN).to_pylist(),
-                                         table.column(SOURCE_SHA256_COLUMN).to_pylist())]
+    """A row IS its file, so its parent is row 0 of that file; an unreached row has no parent."""
+    ids = table.column(SOURCE_ID_COLUMN).to_pylist()
+    shas = table.column(SOURCE_SHA256_COLUMN).to_pylist()
     return RowLineage([
-        [RowParent(stage_id, 0, source_file=binding.path, source_file_sha=binding.sha256)]
-        for binding in read
+        [] if source_id is None else _parent_in_bound_file(stage_id, source_id, sha256, ctx)
+        for source_id, sha256 in zip(ids, shas)
     ])
+
+
+def _parent_in_bound_file(stage_id: str, source_id: str, sha256: str, ctx: RunContext) -> list[RowParent]:
+    binding = require_bound_file(source_id, sha256, ctx.bound_sources)
+    return [RowParent(stage_id, 0, source_file=binding.path, source_file_sha=binding.sha256)]
 
 
 def _resolve_source_table_path(run_dir: Path, stage_id: str) -> Path:

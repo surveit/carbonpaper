@@ -53,6 +53,14 @@ class MirroredBytes(AcquiredBytes):
     sha256: str
 
 
+@dataclass(frozen=True)
+class UnreachedSource:
+    """A source the connector could not reach: a row with no file, naming only the URL it asked for."""
+
+    requested_url: str
+    metadata: Mapping[str, MetadataValue]
+
+
 KindParams = TypeVar("KindParams", bound=ConnectorParams)
 
 
@@ -63,13 +71,14 @@ class ConnectorSpec(Generic[KindParams]):
     kind: str
     params_model: type[KindParams]
     metadata_columns: tuple[Column, ...]
-    acquire: Callable[[KindParams], Iterator[AcquiredBytes]]
+    acquire: Callable[[KindParams], Iterator[AcquiredBytes | UnreachedSource]]
 
 
 SOURCE_COLUMNS: tuple[Column, ...] = (
-    Column(name=SOURCE_ID_COLUMN, type="str", nullable=False),
-    Column(name=SOURCE_SHA256_COLUMN, type="str", nullable=False),
-    Column(name="filename", type="str", nullable=False),
+    # source_id, source_sha256 and filename are None for a source the connector could not reach.
+    Column(name=SOURCE_ID_COLUMN, type="str", nullable=True),
+    Column(name=SOURCE_SHA256_COLUMN, type="str", nullable=True),
+    Column(name="filename", type="str", nullable=True),
     # None for an uploaded file a run binds in place of acquiring.
     Column(name="origin_url", type="str", nullable=True),
     Column(name="fetched_at", type="str", nullable=True),

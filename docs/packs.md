@@ -40,7 +40,10 @@ and the kind's `params_model` validates the result. Once every other check has p
    handler reads that table.
 
 A file the connector cannot reach raises `SourceUnavailable`, refusing the run with the
-stage and file named. A resume reads the table its prepare wrote. A workflow test or an eval
+stage and file named. A connector may instead yield `UnreachedSource(requested_url, metadata)`:
+its row has null `source_id`, `source_sha256`, `filename` and `fetched_at`, `origin_url` is the
+requested URL, its lineage has no parent file, and it is not a `ReadFile`. A stage that yields
+only unreached sources is refused, and `read_pages` refuses an unreached row, so filter first. A resume reads the table its prepare wrote. A workflow test or an eval
 prepares no run, so a stage of a pack's kind fails there.
 
 ## The docket pack
