@@ -3,3 +3,4 @@ from __future__ import annotations
 
 from app.packs import docket as docket
 from app.packs import opinions as opinions
+from app.packs import web as web

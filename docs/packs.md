@@ -69,3 +69,30 @@ than its first copy refuses the run. A 429 is waited out for the `Retry-After` i
 (`app/core/url_fetch.py`); a `Retry-After` over that, missing or not whole seconds, or a 429
 after the 5th wait, refuses the run. There is no mirror: every run fetches. `ATTRIBUTION.md`
 holds the terms line.
+
+## The web pack
+
+`web_pages` fetches each URL in `urls` (each with an optional `key`), or in the `url_column` of a
+`url_table` file (with an optional `key_column`), and gives one row per URL in the order listed.
+Give exactly one of `urls` and `url_table`; a URL listed twice refuses the run, naming it. A row
+whose page was read carries the stored file (named `<key>.<suffix>`, or the URL's position in the
+list when it has no key); a row whose page was not has no file and `fetch_status` says why. The
+metadata columns are `url_key`, `requested_url`, `final_url` (after redirects), `content_type`,
+`http_status` and `fetch_status`. Each request waits up to 30 seconds and sends the user agent in
+`app/packs/web/connector.py`. A 429 is waited out as in the opinions pack.
+
+| `fetch_status` | Meaning | File stored |
+| --- | --- | --- |
+| `ok` | Text length is within `min_text_chars` (200) and `max_text_chars` (2,000,000) | yes |
+| `unreadable` | Fewer than `min_text_chars` characters of text read | yes |
+| `too_long` | More than `max_text_chars` characters of text read | yes |
+| `too_long` | The body is over the store's file ceiling (`CARBON_PAPER_MAX_UPLOAD_BYTES`) | no |
+| `unsupported_type` | Not a PDF (body starts `%PDF-`), `text/html` or `text/plain` | no |
+| `http_<code>` | The server answered with that status | no |
+| `timeout` | No answer within the request timeout | no |
+| `unreachable` | Any other connection failure | no |
+| `invalid_url` | Not an http or https URL; no request is made | no |
+
+Text length is what `read_pages` will read from the stored file: a PDF through pypdf, a page
+as the article text trafilatura extracts, a text file as UTF-8. A run where no URL was read
+refuses.
