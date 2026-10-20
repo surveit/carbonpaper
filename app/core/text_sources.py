@@ -127,10 +127,7 @@ def _require_one_page_reader(path: Path) -> None:
 
 def _read_utf8_text(body: bytes) -> str:
     # Universal newlines, as Path.read_text gave, so stored span offsets keep their meaning.
-    return body.decode("utf-8").replace("
-", "
-").replace("", "
-")
+    return body.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
 
 
 def _read_html_text(body: bytes) -> str:
