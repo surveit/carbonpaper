@@ -23,14 +23,12 @@ from claude_agent_sdk import (
     ToolUseBlock,
     UserMessage,
 )
-from pydantic import ValidationError
 
 # `CLI_PATH` is the located Claude Code CLI (the SDK does not always find it on
 # PATH on Windows — app.core.llm_sdk probes the known install locations).
+from app.core.agent.engine import TurnRecorder
 from app.core.agent.errors import AccountLimitReached
-from app.core.agent.store import OFFER_NEXT_STEPS, NextSteps
 from app.core.agent.usage import LlmUsage
-from app.core.json_types import JsonDict
 from app.core.llm_sdk import CLI_PATH as _CLI_PATH
 from app.core.ids import ID
 
@@ -152,59 +150,15 @@ class ClaudeAgentSdkEngine:
         # ResultMessage arrives spent an amount nobody reported, and leaving the
         # previous turn's figure in place would bill it a second time.
         self.last_usage = None
-        assistant_parts: list[dict[str, Any]] = []
-        hidden_tool_result_ids: set[ID] = set()
+        recorder = TurnRecorder(emit=emit, tool_labels=self._tool_labels)
         session_id: ID | None = None
         async for msg in query(prompt=prompt, options=self._options(resume)):
             if isinstance(msg, AssistantMessage):
-                for block in msg.content:
-                    if isinstance(block, ThinkingBlock):
-                        # A redacted or signature-only block carries no text; emitting
-                        # it opens an empty disclosure in the transcript.
-                        text = getattr(block, "thinking", "")
-                        if text.strip():
-                            emit({"kind": "thinking", "text": text})
-                            assistant_parts.append({"type": "thinking", "text": text})
-                    elif isinstance(block, TextBlock):
-                        emit({"kind": "text", "text": block.text})
-                        assistant_parts.append({"type": "text", "text": block.text})
-                    elif isinstance(block, ToolUseBlock):
-                        args = json.dumps(block.input, default=str)
-                        # The CLI calls tools by their namespaced name
-                        # (e.g. "mcp__tools__read_stage"); the friendly label is
-                        # keyed by the bare tool name.
-                        bare = block.name.rsplit("__", 1)[-1]
-                        offered = _read_offered_steps(bare, block.input)
-                        if offered is not None:
-                            # Its own part type, so the page draws buttons and the
-                            # reader is never shown the plumbing behind them.
-                            hidden_tool_result_ids.add(block.id)
-                            options = render_offered_options(offered)
-                            emit({"kind": "offer", "options": options})
-                            assistant_parts.append(
-                                {"type": "offer", "options": options})
-                            continue
-                        if bare == "submit_answer":
-                            hidden_tool_result_ids.add(block.id)
-                        label = self._tool_labels.get(bare, bare)
-                        emit({
-                            "kind": "tool_call",
-                            "name": bare,
-                            "args": args,
-                            "label": label,
-                        })
-                        assistant_parts.append({
-                            "type": "tool_call",
-                            "name": bare,
-                            "args": args,
-                            "label": label,
-                        })
+                _record_assistant_blocks(msg, recorder)
             elif isinstance(msg, UserMessage):
                 # UserMessage.content may be a bare str (a plain user turn) or a
                 # list of blocks (tool results). We only surface tool results.
-                _record_tool_results(
-                    msg, emit, assistant_parts, hidden_tool_result_ids
-                )
+                _record_tool_results(msg, recorder)
             elif isinstance(msg, SystemMessage):
                 # The CLI's own account of the turn — the init message carries
                 # which MCP servers connected and which tools the model can
@@ -239,42 +193,26 @@ class ClaudeAgentSdkEngine:
                     exhausted = _account_limit_detail(msg)
                     if exhausted is not None:
                         raise AccountLimitReached(exhausted)
-        transcript = [
-            {"role": "user", "parts": [{"type": "text", "text": prompt}]},
-            {"role": "assistant", "parts": assistant_parts},
-        ]
-        return transcript, session_id
+        return recorder.build_transcript(prompt), session_id
 
 
-def render_offered_options(offered: NextSteps) -> list[JsonDict]:
-    """Both destinations are JSON: the SSE wire, and the stored transcript."""
-    return [option.model_dump(mode="json") for option in offered.options]
+def _record_assistant_blocks(message: AssistantMessage, recorder: TurnRecorder) -> None:
+    for block in message.content:
+        if isinstance(block, ThinkingBlock):
+            recorder.record_thinking(getattr(block, "thinking", ""))
+        elif isinstance(block, TextBlock):
+            recorder.record_text(block.text)
+        elif isinstance(block, ToolUseBlock):
+            # The CLI names a tool "mcp__tools__<name>"; the recorder keys on the bare name.
+            recorder.record_tool_call(block.id, block.name.rsplit("__", 1)[-1], block.input)
 
 
-def _read_offered_steps(tool_name: str, payload: Any) -> NextSteps | None:
-    """None for any other tool, and for arguments that do not validate — both draw as a tool row."""
-    if tool_name != OFFER_NEXT_STEPS:
-        return None
-    try:
-        return NextSteps.model_validate(payload)
-    except ValidationError:
-        return None
-
-
-def _record_tool_results(
-    message: UserMessage,
-    emit: Callable[[dict[str, Any]], None],
-    assistant_parts: list[dict[str, Any]],
-    hidden_tool_result_ids: set[ID],
-) -> None:
+def _record_tool_results(message: UserMessage, recorder: TurnRecorder) -> None:
     blocks = message.content if isinstance(message.content, list) else []
     for block in blocks:
-        if not isinstance(block, ToolResultBlock):
-            continue
-        hide = block.tool_use_id in hidden_tool_result_ids
-        hidden_tool_result_ids.discard(block.tool_use_id)
-        if hide and not getattr(block, "is_error", False):
-            continue
-        content = _stringify(getattr(block, "content", ""))
-        emit({"kind": "tool_result", "content": content})
-        assistant_parts.append({"type": "tool_result", "content": content})
+        if isinstance(block, ToolResultBlock):
+            recorder.record_tool_result(
+                block.tool_use_id,
+                _stringify(getattr(block, "content", "")),
+                is_error=bool(getattr(block, "is_error", False)),
+            )

@@ -13,8 +13,8 @@ from claude_agent_sdk import SdkMcpTool
 from pydantic import BaseModel
 
 from app.tools.editing import EditingContext, build_editing_tools
-from app.core.agent.registry import as_tool_content, build_mcp_server
-from app.core.agent.bound_tool import bind_by_signature
+from app.core.agent.registry import build_mcp_server
+from app.core.agent.bound_tool import bind_by_signature, render_tool_text
 from app.tools import draft_editing
 from app.tools.tool_specs import bind
 from app.services import workspace
@@ -129,13 +129,13 @@ def test_add_stage_then_save_creates_an_unpublished_version(examples_root: Path)
 
 
 
-def test_as_content_serializes_a_pydantic_model_to_its_fields() -> None:
+def test_a_pydantic_model_renders_as_its_fields() -> None:
     class _Sample(BaseModel):
         ok: bool
         label: str
 
-    out = as_tool_content(_Sample(ok=True, label="draft"))
-    assert json.loads(out["content"][0]["text"]) == {"ok": True, "label": "draft"}
+    assert json.loads(render_tool_text(_Sample(ok=True, label="draft"))) == {
+        "ok": True, "label": "draft"}
 
 
 def test_a_tool_taking_a_model_is_handed_json_and_gets_the_model(examples_root: Path) -> None:

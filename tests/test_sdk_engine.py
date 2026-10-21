@@ -8,6 +8,8 @@ import json
 from typing import Any
 
 import app.core.agent.sdk_engine as se
+from app.core.agent.engine import ChatEngine
+from app.core.agent.store import OFFER_NEXT_STEPS
 
 
 class _Text:  # stand-ins matching the block interface the engine reads
@@ -71,7 +73,7 @@ def test_stream_turn_maps_blocks_to_normalized_events(monkeypatch: Any) -> None:
     monkeypatch.setattr(se, "ThinkingBlock", type("Nope", (), {}))
 
     events: list[dict[str, Any]] = []
-    engine = se.ClaudeAgentSdkEngine(
+    engine: ChatEngine = se.ClaudeAgentSdkEngine(
         system_prompt="sp",
         mcp_server=object(),
         allowed_tools=["mcp__tools__edit_stages"],
@@ -290,7 +292,7 @@ def test_an_offer_survives_the_json_the_sse_route_writes(monkeypatch: Any) -> No
     async def fake_query(*, prompt: str, options: Any) -> Any:
         yield _Asst([
             _Text("Take a look at any of these."),
-            _Tool(f"mcp__tools__{se.OFFER_NEXT_STEPS}", {"options": [
+            _Tool(f"mcp__tools__{OFFER_NEXT_STEPS}", {"options": [
                 {"text": "Open the review queue", "url": "/project/p/runs/r/queue/s"},
                 {"text": "Tell me more first"},
             ]}),

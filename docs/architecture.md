@@ -173,6 +173,7 @@ is its only exit, strict-validating before freezing it into a version via
 `create_version_from_stages`).
 
 ## `app/core/llm/`, tests
-`core/llm/options.py` — the `LLMModel` menu. `tests/` (pytest; `conftest.py` forces
+`core/llm/options.py` — the `LLMModel` menu; `core/llm/prices.py` — what one request to a
+priced model costs, refusing a model it has no rates for. `tests/` (pytest; `conftest.py` forces
 `agent_available` False so no test can reach a real model); `.github/workflows/ci.yml`
 runs ruff + mypy + pytest on every PR.

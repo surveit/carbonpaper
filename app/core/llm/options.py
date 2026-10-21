@@ -8,6 +8,7 @@ from enum import Enum
 
 class LLMModel(str, Enum):
     claude_haiku_4_5 = "claude-haiku-4-5"
+    claude_haiku_5_5 = "claude-haiku-5-5"
     claude_sonnet_4_6 = "claude-sonnet-4-6"
     claude_sonnet_5 = "claude-sonnet-5"
     claude_opus_5 = "claude-opus-5"
