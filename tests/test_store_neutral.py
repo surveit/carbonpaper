@@ -12,8 +12,8 @@ def test_project_session_roundtrips_neutral_transcript():
         ]},
     ]
     store.append_messages(sid, msgs)
-    # stateless: no history fed back into the next turn
-    assert store.load_messages(sid) == []
+    # the next turn's engine is handed what this one stored
+    assert store.load_messages(sid) == msgs
     # but the transcript is renderable on page reload, in the order the turn ran
     reply = store.history_view(sid)[-1]
     assert [b.kind for b in reply.blocks] == ["tool", "text"]

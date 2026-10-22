@@ -10,6 +10,7 @@ import asyncio
 import uuid
 from typing import Any, Awaitable, Callable
 
+import anthropic
 from claude_agent_sdk import ClaudeSDKError
 
 from app.core.ids import ID
@@ -70,17 +71,12 @@ class TurnManager:
             )
             store.append_messages(session_id, messages)
             if resume_token:
-                # Carry the CLI session forward so the next turn resumes this
-                # conversation (the demo backend returns None — nothing to carry).
+                # The CLI engine's session id, so its next turn resumes this one;
+                # the API engine returns None.
                 store.set_resume_token(session_id, resume_token)
-        except (ClaudeSDKError, OSError) as exc:
-            # Expected failure modes of a model turn — a Claude Agent SDK error
-            # (CLI not found, connection dropped, process failure) or a
-            # socket/subprocess error (OSError) — reach the client as an error
-            # event. A genuine bug (KeyError, ValueError, …) is NOT caught here:
-            # it propagates and surfaces loudly rather than masquerading as a
-            # handled model failure. The `finally` still emits `done`, so the
-            # client is never left hanging.
+        except (ClaudeSDKError, anthropic.AnthropicError, OSError) as exc:
+            # A failure of the model backend reaches the reader;
+            # a bug (KeyError, ValueError) propagates.
             turn.emit({"kind": "error", "text": f"{type(exc).__name__}: {exc}"})
         finally:
             _record_turn_spend(engine, store, session_id)

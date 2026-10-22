@@ -137,7 +137,14 @@ def offline_agent_sdk(monkeypatch, request):
         )
         yield  # never runs: what makes refuse the async generator query() is
 
+    def refuse_client(**kwargs):
+        raise LLMError(
+            "a test reached the live Messages API. Ask for the `scripted_agent_turn` "
+            "fixture, hand the engine a fake client, or mark the test `live_llm`."
+        )
+
     monkeypatch.setattr("app.core.agent.sdk_engine.query", refuse)
+    monkeypatch.setattr("app.core.agent.api_engine.anthropic.AsyncAnthropic", refuse_client)
 
 
 @pytest.fixture
@@ -151,6 +158,8 @@ def scripted_agent_turn(monkeypatch):
 
     monkeypatch.setattr(
         "app.core.agent.sdk_engine.ClaudeAgentSdkEngine.stream_turn", turn)
+    monkeypatch.setattr(
+        "app.core.agent.api_engine.AnthropicApiEngine.stream_turn", turn)
 
 
 @pytest.fixture(autouse=True)

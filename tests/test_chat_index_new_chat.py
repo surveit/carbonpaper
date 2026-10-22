@@ -6,7 +6,6 @@ from fastapi.testclient import TestClient
 from app.core.agent.registry import build_engine
 from app.core.agent.store import open_session_store
 from app.main import app
-from app.core.agent.sdk_engine import ClaudeAgentSdkEngine
 from app.services.project import create_project, list_projects
 from app.tools.editing import EditingContext
 
@@ -70,5 +69,4 @@ def test_a_session_materialized_with_a_project_still_reports_that_project() -> N
 def test_the_editing_engine_builds_for_a_projectless_session() -> None:
     """build_engine validates the context and binds every tool, so not raising is the check."""
     data = _store.load(open_session("editing"))
-    engine = build_engine(data["agent_id"], data["context"] | _READER)
-    assert isinstance(engine, ClaudeAgentSdkEngine)
+    build_engine(data["agent_id"], data["context"] | _READER)

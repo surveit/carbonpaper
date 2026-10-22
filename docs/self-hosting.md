@@ -42,9 +42,9 @@ State lives on the volume: `CARBON_PAPER_DB_PATH=/data/app.db` (the document
 store) and `CARBON_PAPER_PROJECTS_DIR=/data/projects`. The frame store follows the
 database path's own directory, so `CARBON_PAPER_FRAMES_ROOT` stays unset.
 `CLAUDE_CONFIG_DIR=/data/claude` puts a third store there: the Claude Code CLI
-writes each chat's transcript under its config dir, and a chat resumes by an id
-the document store holds, so leaving the transcripts in the image ended every
-deploy with resume tokens naming sessions the CLI had thrown away.
+writes the transcript of each chat it runs under its config dir, and such a chat
+resumes by an id the document store holds, so leaving the transcripts in the image
+ended every deploy with resume tokens naming sessions the CLI had thrown away.
 `docker-entrypoint.sh` creates the directories, runs `alembic upgrade head`, then
 execs uvicorn on port 8080 — the migration is in the entrypoint rather than a
 `release_command` because a release machine has no volume attached.
@@ -53,18 +53,21 @@ One-time setup for a new app:
 
 ```
 fly volumes create carbonpaper_data --size 10 --region iad
-fly secrets set ANTHROPIC_API_KEY=...
+fly secrets set ANTHROPIC_API_KEY=... CARBON_PAPER_ANTHROPIC_API_KEY=...
 ```
 
 Credentials are a Fly secret, never a repo value and never `[env]` in `fly.toml`.
-No app module reads them: the Claude Code CLI that `claude-agent-sdk` spawns
-inherits the server's environment and authenticates from it, which is the one
-seam either credential goes through. A subscription-authenticated deploy sets
+They reach the model by two seams. The editing chat reads
+`CARBON_PAPER_ANTHROPIC_API_KEY` itself and calls the Messages API with it. Everything
+else goes through the Claude Code CLI that `claude-agent-sdk` spawns, which inherits
+the server's environment and authenticates from it; no app module reads that
+credential. A subscription-authenticated deploy sets
 `CLAUDE_CODE_OAUTH_TOKEN` instead and must NOT also set `ANTHROPIC_API_KEY` —
 the API key outranks the OAuth token in the CLI's auth precedence, so setting
 both silently bills the metered API (see `.github/workflows/live-llm-smoke.yml`,
 which runs on the OAuth token for that reason). Either way it is one
 `fly secrets set`, not a rebuild.
 
-Without a credential the server still boots and serves; `llm_transform` stages
-are what fail.
+Without a credential the server still boots and serves. Without the CLI's,
+`llm_transform` stages fail; without `CARBON_PAPER_ANTHROPIC_API_KEY`, the editing
+chat does.

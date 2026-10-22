@@ -11,8 +11,7 @@ _SUBPROCESS_TRANSPORT = "_make_subprocess_transport"
 LOOP_FACTORY_PATH = "app.core.event_loop:create_event_loop"
 
 
-# uvicorn --loop factory. Chat turns spawn the claude CLI on the serving loop;
-# selector loops cannot.
+# uvicorn --loop factory: a CLI-engine turn spawns the claude CLI here, which a selector loop cannot.
 def create_event_loop() -> asyncio.AbstractEventLoop:
     if sys.platform == "win32":
         return asyncio.ProactorEventLoop()
@@ -25,8 +24,8 @@ def validate_running_loop_can_spawn_subprocesses() -> None:
         return
     raise EventLoopCannotSpawnSubprocesses(
         f"this server is running on a {type(loop).__name__}, which cannot start a child "
-        "process. Every chat turn spawns the claude CLI on this loop, so chat would fail "
-        "on each turn with an empty 'CLIConnectionError: Failed to start Claude Code:'. "
+        "process. A chat turn on the CLI engine spawns the claude CLI on this loop, so "
+        "each would fail with an empty 'CLIConnectionError: Failed to start Claude Code:'. "
         f"Start uvicorn with --loop {LOOP_FACTORY_PATH} (./start already passes it). "
         "See docs/event-loop-and-subprocesses.md"
     )

@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from app.core.agent import registry
 from app.core.agent.registry import AgentConfig, OpeningTurn, register
+from app.core.agent.sdk_engine import ClaudeAgentSdkEngine
 from app.core.agent.session import build_session_engine, create_agent_session
 from app.core.agent.store import open_session_store
 from app.main import app
@@ -69,14 +70,18 @@ def test_the_written_message_is_stored_as_the_agents_first_turn() -> None:
 
 
 def test_the_model_is_told_what_this_conversation_opened_with() -> None:
-    """The engine drops message_history and the store replays none, so the system prompt is the only route."""
+    """Neither engine replays the stored opening turn, so the system prompt is the only route."""
     engine = build_session_engine(_open_session("greeter"), _BASE_URL)
 
+    assert isinstance(engine, ClaudeAgentSdkEngine)
     assert _OPENING in engine._system_prompt
 
 
 def test_a_session_that_opened_with_nothing_says_so_to_nobody() -> None:
-    assert build_session_engine(_open_session("silent"), _BASE_URL)._system_prompt == "sp"
+    engine = build_session_engine(_open_session("silent"), _BASE_URL)
+
+    assert isinstance(engine, ClaudeAgentSdkEngine)
+    assert engine._system_prompt == "sp"
 
 
 def test_the_page_renders_the_opening_message_and_asks_nothing_of_the_server() -> None:

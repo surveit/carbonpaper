@@ -1,7 +1,7 @@
 """Dump every system prompt and tool block this app ships to an LLM, as markdown.
 
-Read out of the live objects — the tool schemas come back from the MCP servers the
-engines actually mount, not from a second description of them.
+Read out of the live objects — the tool schemas come back from the MCP servers the CLI
+engines mount, or off the specs the API engine sends, not from a second description of them.
 
 Usage:  python -m scripts.dump_prompts [--out PROMPTS.md]
 """
@@ -27,7 +27,6 @@ from app.compiler.stage_tests_prompt import STAGE_TESTS_SYSTEM_PROMPT
 from app.core.agent.agent import Agent
 from app.core.agent.bound_tool import BoundToolSpec
 from app.core.agent.registry import build_mcp_server
-from app.core.agent.sdk_engine import MCP_SERVER_NAME
 from app.models import Terms
 from app.models.citations import StageOutputCellCitation
 from app.models.claim_review import EvidenceBundle, Reviewer
@@ -89,17 +88,16 @@ def render_editing_agent() -> str:
     return render_surface(
         title="Editing agent",
         source="app/agents/compiler/prompt.py · tools: app/tools/editing.py",
-        model=EDITING_CONFIG.model,
+        model=EDITING_CONFIG.backend.model,
         note=(
-            "Mounted as an in-process MCP server, so the model sees each tool as "
-            f"`mcp__{MCP_SERVER_NAME}__<name>`. No built-in tools are on offer. A "
-            "A session appends two things to the prompt below "
-            "(`AgentConfig.render_session_prompt`): the pages of the address its reader "
+            "Sent to the Messages API directly, so the model sees each tool under its "
+            "own name. No other tools are on offer. A session appends two things to the "
+            "prompt below (`AgentConfig.render_session_prompt`): the pages of the address its reader "
             "is on, shown here against a placeholder host, and that project's agreed "
             "terms, absent here because no project is loaded."
         ),
         system_prompt=f"{EDITING_CONFIG.system_prompt}\n\n{render_link_map(_PLACEHOLDER_HOST)}",
-        tools=read_bound_tools(
+        tools=read_spec_tools(
             build_editing_tools(
                 EditingContext(project_id="<project_id>", base_url=_PLACEHOLDER_HOST)
             )
@@ -111,7 +109,7 @@ def render_tutorial_agent() -> str:
     return render_surface(
         title="Tutorial agent",
         source="app/agents/tutorial/prompt.py · tools: app/tools/tutorial.py",
-        model=TUTORIAL_CONFIG.model,
+        model=TUTORIAL_CONFIG.backend.model,
         note=(
             "The guided tour behind the home zero state. Read-only — it holds no "
             "editing tool."
@@ -277,6 +275,14 @@ def read_agent_tools(agent: Agent[Any]) -> list[types.Tool]:
     # Through build_engine so submit_answer's schema carries every transform a real
     # run applies to it (advertise_more_than_one_argument, in particular).
     return read_server_tools(agent.build_engine()._mcp_server)
+
+
+def read_spec_tools(specs: list[BoundToolSpec]) -> list[types.Tool]:
+    """The tools as AnthropicApiEngine sends them: each spec's name, description and schema."""
+    return [
+        types.Tool(name=spec.name, description=spec.description, inputSchema=spec.json_schema)
+        for spec in specs
+    ]
 
 
 def read_bound_tools(specs: list[BoundToolSpec]) -> list[types.Tool]:

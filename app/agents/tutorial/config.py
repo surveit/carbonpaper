@@ -13,7 +13,7 @@ from app.agents.tutorial.prompt import (
     TUTORIAL_SYSTEM_PROMPT,
 )
 from app.core.agent.bound_tool import BoundToolSpec, bind_by_signature
-from app.core.agent.registry import AgentConfig, OpeningTurn, register
+from app.core.agent.registry import AgentConfig, CliBackend, OpeningTurn, register
 from app.tools import eval_runs, shared
 from app.tools.eval_runs import EvalRunResult
 from app.tools.shared import StageOutputRows
@@ -40,7 +40,7 @@ CONFIG = AgentConfig(
     render_opening_turn=_render_opening_turn,
     # The tour's turns are short and its tool sequence is dictated by the prompt —
     # there is nothing here for a reasoning block to earn.
-    thinking={"type": "disabled"},
+    backend=CliBackend(thinking={"type": "disabled"}),
 )
 
 

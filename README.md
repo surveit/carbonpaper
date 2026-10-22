@@ -53,9 +53,10 @@ code you just tried. `master` is where work lands and is not promoted until it i
 green.
 
 The server boots and serves with no credential. What fails without one is the steps
-that call a model — `claude auth login` once is the only part `./start` will not do
-for you. [docs/getting-started.md](docs/getting-started.md) covers signing in, the two
-environment variables that override it, and where your state lives.
+that call a model. `./start` leaves two things to you: `claude auth login` once, and
+exporting `CARBON_PAPER_ANTHROPIC_API_KEY` for the editing chat.
+[docs/getting-started.md](docs/getting-started.md) covers both, the two environment
+variables that override the login, and where your state lives.
 
 Your local server opens on the same tour, in place of the project list, until you have
 taken it once.
