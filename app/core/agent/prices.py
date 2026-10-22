@@ -3,8 +3,6 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, NonNegativeInt
 
-from app.core.llm.options import LLMModel
-
 _TOKENS_PER_MTOK = 1_000_000
 
 
@@ -37,8 +35,8 @@ class RequestTokens(BaseModel):
 
 
 # https://platform.claude.com/docs/en/about-claude/pricing
-_PRICES: dict[LLMModel, ModelPrice] = {
-    LLMModel.claude_haiku_5_5: ModelPrice(
+_PRICES: dict[str, ModelPrice] = {
+    "claude-haiku-5-5": ModelPrice(
         short_prompt_max_tokens=100_000,
         short_prompt=RateCard(input_usd_per_mtok=0.10, output_usd_per_mtok=0.50),
         long_prompt=RateCard(input_usd_per_mtok=0.50, output_usd_per_mtok=2.50),
@@ -48,7 +46,7 @@ _PRICES: dict[LLMModel, ModelPrice] = {
 }
 
 
-def price_request(model: LLMModel, tokens: RequestTokens) -> float:
+def price_request(model: str, tokens: RequestTokens) -> float:
     price = _find_price(model)
     card = _choose_rate_card(price, tokens)
     tokens_at_input_rate = (
@@ -61,15 +59,15 @@ def price_request(model: LLMModel, tokens: RequestTokens) -> float:
     return input_usd + output_usd
 
 
-def validate_priced(model: LLMModel) -> None:
+def validate_priced(model: str) -> None:
     _find_price(model)
 
 
-def _find_price(model: LLMModel) -> ModelPrice:
+def _find_price(model: str) -> ModelPrice:
     if model not in _PRICES:
         raise ValueError(
             f"{model} has no price, so what a call to it costs cannot be reported; add its "
-            "rates to _PRICES in app/core/llm/prices.py"
+            "rates to _PRICES in app/core/agent/prices.py"
         )
     return _PRICES[model]
 

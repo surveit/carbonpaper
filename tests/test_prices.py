@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import pytest
 
+from app.core.agent.prices import RequestTokens, price_request, validate_priced
 from app.core.llm import LLMModel
-from app.core.llm.prices import RequestTokens, price_request, validate_priced
 
-_HAIKU = LLMModel.claude_haiku_5_5
+_HAIKU = "claude-haiku-5-5"
 
 
 def _tokens(*, uncached: int = 0, written: int = 0, read: int = 0, output: int = 0) -> RequestTokens:
@@ -53,10 +53,14 @@ def test_a_cache_read_costs_a_tenth_and_a_cache_write_a_quarter_more_than_input(
 
 def test_a_model_with_no_price_refuses_rather_than_costing_nothing() -> None:
     with pytest.raises(ValueError, match="claude-opus-5 has no price.*add its rates"):
-        price_request(LLMModel.claude_opus_5, _tokens(uncached=1))
+        price_request("claude-opus-5", _tokens(uncached=1))
 
 
 def test_validating_an_unpriced_model_raises_the_same_error_before_any_call() -> None:
     validate_priced(_HAIKU)
     with pytest.raises(ValueError, match="claude-opus-5 has no price"):
-        validate_priced(LLMModel.claude_opus_5)
+        validate_priced("claude-opus-5")
+
+
+def test_the_menu_s_haiku_5_5_id_is_the_one_priced() -> None:
+    validate_priced(LLMModel.claude_haiku_5_5.value)

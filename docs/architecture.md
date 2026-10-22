@@ -172,8 +172,16 @@ that may be invalid mid-edit, edited only through the editing agent's tools; `sa
 is its only exit, strict-validating before freezing it into a version via
 `create_version_from_stages`).
 
+## `app/core/agent/` — the chat agent
+`engine.py` — `ChatEngine`, the turn contract every chat engine meets, and `TurnRecorder`,
+which turns a turn's blocks into the page's events and the stored transcript. Two engines
+meet it: `sdk_engine.py` drives the Claude Code CLI; `api_engine.py` calls the Messages API
+through the `anthropic` SDK, with its key in `CARBON_PAPER_ANTHROPIC_API_KEY`.
+`bound_tool.py` — one tool, described in JSON Schema and pydantic, and the call that runs it.
+`prices.py` — what one request to a priced model costs, keyed by model id and refusing a
+model it has no rates for.
+
 ## `app/core/llm/`, tests
-`core/llm/options.py` — the `LLMModel` menu; `core/llm/prices.py` — what one request to a
-priced model costs, refusing a model it has no rates for. `tests/` (pytest; `conftest.py` forces
+`core/llm/options.py` — the `LLMModel` menu. `tests/` (pytest; `conftest.py` forces
 `agent_available` False so no test can reach a real model); `.github/workflows/ci.yml`
 runs ruff + mypy + pytest on every PR.
