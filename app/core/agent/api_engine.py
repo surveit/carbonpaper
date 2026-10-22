@@ -24,7 +24,7 @@ from anthropic.types import (
 from app.core.agent.bound_tool import BoundToolSpec, ToolOutcome, call_bound_tool
 from app.core.agent.engine import TurnRecorder
 from app.core.agent.errors import ApiKeyMissing
-from app.core.agent.prices import RequestTokens, price_request, validate_priced
+from app.core.agent.prices import RequestTokens, compute_request_cost, validate_priced
 from app.core.agent.store import MessageRole, Offer, PartType, ToolCall, TranscriptMessage
 from app.core.agent.usage import LlmUsage
 from app.core.ids import ID
@@ -145,7 +145,7 @@ class AnthropicApiEngine:
         return await call_bound_tool(spec, block.input)
 
     def _add_spend(self, usage: Usage) -> None:
-        spend = _price_reply(self._model, usage)
+        spend = _compute_reply_usage(self._model, usage)
         self.last_usage = spend if self.last_usage is None else self.last_usage + spend
 
     @contextlib.asynccontextmanager
@@ -234,7 +234,7 @@ def _describe_early_stop(reply: Message) -> str:
     return detail
 
 
-def _price_reply(model: str, usage: Usage) -> LlmUsage:
+def _compute_reply_usage(model: str, usage: Usage) -> LlmUsage:
     cache_reads = usage.cache_read_input_tokens or 0  # data-default-ok: None = none reported
     tokens = RequestTokens(
         input_tokens=usage.input_tokens,
@@ -246,7 +246,7 @@ def _price_reply(model: str, usage: Usage) -> LlmUsage:
         model=model,
         input_tokens=usage.input_tokens,
         output_tokens=usage.output_tokens,
-        cost_usd=price_request(model, tokens),
+        cost_usd=compute_request_cost(model, tokens),
         calls=1,
     )
 

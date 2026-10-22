@@ -46,7 +46,7 @@ _PRICES: dict[str, ModelPrice] = {
 }
 
 
-def price_request(model: str, tokens: RequestTokens) -> float:
+def compute_request_cost(model: str, tokens: RequestTokens) -> float:
     price = _find_price(model)
     card = _choose_rate_card(price, tokens)
     tokens_at_input_rate = (
