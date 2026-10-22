@@ -3594,3 +3594,4 @@
 {"run_id":"39286431381","run_url":"https://github.com/surveit/carbonpaper/actions/runs/39286431381","created":"2026-10-19T16:34:31Z","branch":"feat/docket-influence-corpus","event":"pull_request","contracts_kept":18,"findings":[]}
 {"run_id":"39286431381","run_url":"https://github.com/surveit/carbonpaper/actions/runs/39286431381","created":"2026-10-19T16:36:26Z","branch":"feat/docket-influence-corpus","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"39748630758","run_url":"https://github.com/surveit/carbonpaper/actions/runs/39748630758","created":"2026-10-22T08:34:16Z","branch":"feat/direct-api-agent-engine","event":"pull_request","contracts_kept":17,"findings":[]}
+{"run_id":"39748630758","run_url":"https://github.com/surveit/carbonpaper/actions/runs/39748630758","created":"2026-10-22T08:37:01Z","branch":"feat/direct-api-agent-engine","event":"pull_request","contracts_kept":null,"findings":[]}
