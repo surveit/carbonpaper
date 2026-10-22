@@ -172,6 +172,20 @@ that may be invalid mid-edit, edited only through the editing agent's tools; `sa
 is its only exit, strict-validating before freezing it into a version via
 `create_version_from_stages`).
 
+## `app/core/agent/` — the chat agent
+`engine.py` — `ChatEngine`, the turn contract every chat engine meets, and `TurnRecorder`,
+which turns a turn's blocks into the page's events and the stored transcript. Two engines
+meet it: `sdk_engine.py` drives the Claude Code CLI; `api_engine.py` calls the Messages API
+through the `anthropic` SDK, with its key in `CARBON_PAPER_ANTHROPIC_API_KEY`.
+`registry.py` — `build_engine` builds the engine a registered agent's `AgentConfig.backend`
+names: `CliBackend` (a CLI model and thinking setting) or `ApiBackend` (a priced model and an
+effort). The editing agent is on `ApiBackend`, `claude-haiku-5-5` at low effort; the tutorial
+agent is on the CLI. The store hands each turn the session's transcript; the API engine replays
+it as text, while the CLI engine resumes its own session instead.
+`bound_tool.py` — one tool, described in JSON Schema and pydantic, and the call that runs it.
+`prices.py` — what one request to a priced model costs, keyed by model id and refusing a
+model it has no rates for.
+
 ## `app/core/llm/`, tests
 `core/llm/options.py` — the `LLMModel` menu. `tests/` (pytest; `conftest.py` forces
 `agent_available` False so no test can reach a real model); `.github/workflows/ci.yml`

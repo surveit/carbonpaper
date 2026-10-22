@@ -32,8 +32,9 @@ main() {
 
   offer_claude_cli
   report_credential
+  report_chat_key
 
-  # --loop pins our own factory: chat turns spawn the claude CLI on the serving loop,
+  # --loop pins our own factory: CLI-engine turns spawn the claude CLI on the serving loop,
   # and the loop uvicorn picks for --reload on Windows cannot spawn a child process.
   # See app/core/event_loop.py.
   announce "serving http://$HOST:$PORT"
@@ -82,6 +83,18 @@ report_credential() {
   else
     warn "llm stages: not signed in. Run 'claude auth login' in another terminal —"
     warn "the server picks it up on the next run, and needs no restart otherwise."
+  fi
+}
+
+# The editing chat calls the Messages API with a key of its own, and never with
+# ANTHROPIC_API_KEY. Whitespace alone counts as unset, as it does in the app.
+report_chat_key() {
+  local key="${CARBON_PAPER_ANTHROPIC_API_KEY:-}"
+  if [[ -n "${key//[[:space:]]/}" ]]; then
+    announce "editing chat: CARBON_PAPER_ANTHROPIC_API_KEY (metered api)"
+  else
+    warn "editing chat: CARBON_PAPER_ANTHROPIC_API_KEY is unset, so every editing chat"
+    warn "turn will error until it is. Export it and run ./start again."
   fi
 }
 

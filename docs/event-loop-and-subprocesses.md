@@ -1,8 +1,10 @@
 # The event loop and subprocesses
 
-Spawning a child process is a capability of the *event loop*, not of the process. A chat turn
-needs it: `app/core/agent/turns.py` starts the turn with `asyncio.create_task` on the server's
-own loop, and `app/core/agent/sdk_engine.py` spawns the `claude` CLI from there.
+Spawning a child process is a capability of the *event loop*, not of the process. Every turn
+on the CLI engine needs it — the tour's chat, stage-test and review-guide generation, the claim
+reviewers. Each runs as a task on the server's own loop (`app/core/agent/turns.py` starts a
+chat turn with `asyncio.create_task`), and `app/core/agent/sdk_engine.py` spawns the `claude`
+CLI from there. The editing chat runs on the API engine, which spawns nothing.
 
 ## Why a loop can lack it
 
@@ -18,7 +20,7 @@ otherwise working.
 On Windows, `asyncio.SelectorEventLoop` is one of these loops, and uvicorn hands a selector
 loop to its subprocess supervisor — the process that runs under `--reload`, or with
 `workers > 1`. So a Windows dev server started as plain `uvicorn app.main:app --reload` serves
-a UI whose chat cannot run.
+a UI whose CLI-engine turns cannot run.
 
 The workflow runtime is not exposed to this. It reaches the LLM through `run_sync`
 (`app/core/llm_sdk.py`), which hops to its own thread and calls `asyncio.run`, getting the
@@ -33,7 +35,8 @@ platform default loop — a proactor loop on Windows.
 | `validate_running_loop_can_spawn_subprocesses()` | Raises `EventLoopCannotSpawnSubprocesses` when the running loop fails that test. |
 
 `app/main.py` calls the guard as the first statement of the FastAPI lifespan, so a server
-whose loop cannot spawn refuses to start instead of serving a UI whose chat is broken.
+whose loop cannot spawn refuses to start instead of serving a UI whose CLI-engine turns are
+broken.
 
 ## The trade-off
 

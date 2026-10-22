@@ -4,6 +4,7 @@ editing agent's half is what makes an agent write in its project's words."""
 from __future__ import annotations
 
 from collections.abc import Iterator
+from typing import Any
 
 import pytest
 
@@ -12,7 +13,9 @@ from pydantic import BaseModel, ValidationError
 from app.agents.compiler.config import CONFIG as EDITING_CONFIG, _render_project_binding
 from app.agents.compiler.prompt import EDITING_SYSTEM_PROMPT
 from app.core.agent import registry
+from app.core.agent.api_engine import AnthropicApiEngine
 from app.core.agent.registry import AgentConfig, build_engine, register, render_system_prompt
+from app.core.agent.sdk_engine import ClaudeAgentSdkEngine
 from app.models import RowType, Terms, Verb
 from app.services import terms as terms_service
 from app.services import project as project_service
@@ -45,6 +48,12 @@ def _render_label(ctx: BaseModel) -> str:
 def dummy_agent() -> Iterator[None]:
     yield
     registry._registry.pop("dummy", None)
+
+
+def _read_system_prompt(agent_id: str, context: dict[str, Any]) -> str:
+    engine = build_engine(agent_id, context)
+    assert isinstance(engine, (ClaudeAgentSdkEngine, AnthropicApiEngine))
+    return engine._system_prompt
 
 
 # ── the generic hook ─────────────────────────────────────────────────────────
@@ -83,8 +92,7 @@ def test_build_engine_hands_the_appended_prompt_to_the_engine(dummy_agent) -> No
         ),
         _no_tools,
     )
-    engine = build_engine("dummy", {"label": "alpha"})
-    assert engine._system_prompt == "sp\n\nwords for alpha"
+    assert _read_system_prompt("dummy", {"label": "alpha"}) == "sp\n\nwords for alpha"
 
 
 # ── the editing agent's use of it ────────────────────────────────────────────
@@ -104,7 +112,7 @@ def test_the_editing_agent_is_handed_its_projects_words(tmp_path) -> None:
         tmp_path, Terms(row_types=[_FILING], verbs=[_FLAG])
     )
 
-    prompt = build_engine("editing", {"project_id": project_id} | _READER)._system_prompt
+    prompt = _read_system_prompt("editing", {"project_id": project_id} | _READER)
 
     assert prompt.startswith(EDITING_SYSTEM_PROMPT)
     assert "- filing — One disclosure a firm sent in." in prompt
@@ -115,7 +123,7 @@ def test_a_project_that_has_agreed_no_words_appends_no_words(tmp_path) -> None:
     project_id = _project_with(tmp_path, None)
     context = EditingContext(project_id=project_id, **_READER)
 
-    prompt = build_engine("editing", {"project_id": project_id} | _READER)._system_prompt
+    prompt = _read_system_prompt("editing", {"project_id": project_id} | _READER)
 
     assert prompt == "\n\n".join([
         EDITING_SYSTEM_PROMPT,
@@ -127,7 +135,7 @@ def test_a_project_that_has_agreed_no_words_appends_no_words(tmp_path) -> None:
 def test_the_editing_agent_is_handed_the_pages_it_can_link_to(tmp_path) -> None:
     project_id = _project_with(tmp_path, None)
 
-    prompt = build_engine("editing", {"project_id": project_id} | _READER)._system_prompt
+    prompt = _read_system_prompt("editing", {"project_id": project_id} | _READER)
 
     assert "https://carbon.example/project/<project_id>/workflow" in prompt
     assert "https://carbon.example/project/<project_id>/runs/<run_id>" in prompt
@@ -146,7 +154,7 @@ def test_the_words_and_the_links_both_reach_one_session(tmp_path) -> None:
         tmp_path, Terms(row_types=[_FILING], verbs=[_FLAG])
     )
 
-    prompt = build_engine("editing", {"project_id": project_id} | _READER)._system_prompt
+    prompt = _read_system_prompt("editing", {"project_id": project_id} | _READER)
 
     assert "https://carbon.example/project/<project_id>/workflow" in prompt
     assert "- flag — Mark a row for a human to decide on." in prompt
@@ -155,7 +163,7 @@ def test_the_words_and_the_links_both_reach_one_session(tmp_path) -> None:
 def test_a_session_bound_to_no_project_is_still_told_where_its_reader_is(tmp_path) -> None:
     workspace.set_projects_dir(tmp_path)
 
-    prompt = build_engine("editing", dict(_READER))._system_prompt
+    prompt = _read_system_prompt("editing", dict(_READER))
 
     assert prompt == "\n\n".join([
         EDITING_SYSTEM_PROMPT,

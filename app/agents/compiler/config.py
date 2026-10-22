@@ -13,7 +13,8 @@ from app.models.terms import render_terms
 from app.services import terms as terms_service
 from app.tools.editing import EditingContext, build_editing_tools
 from app.tools.prompt_fragments import render_link_map
-from app.core.agent.registry import AgentConfig, OpeningTurn, register
+from app.core.agent.registry import AgentConfig, ApiBackend, OpeningTurn, register
+from app.core.llm.options import LLMModel
 from app.core.agent.bound_tool import BoundToolSpec
 
 
@@ -68,9 +69,7 @@ CONFIG = AgentConfig(
     system_prompt=EDITING_SYSTEM_PROMPT,
     context_schema=EditingContext,
     display_name="Editing",
-    # The CLI's own built-in, which loads a deferred MCP tool's schema before first
-    # use — it renders in the chat but is not one of this agent's tools.
-    extra_tool_labels={"ToolSearch": "Looking up a tool"},
+    backend=ApiBackend(model=LLMModel.claude_haiku_5_5.value, effort="low"),
     # The words are read at session start, so an agent edits in whatever the owner
     # has agreed by then rather than in what the process started with. The address is
     # read per turn, so it is where this reader is rather than where the session opened.

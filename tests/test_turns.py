@@ -7,6 +7,10 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
+import pytest
+
+from app.core.agent.api_engine import API_KEY_VARIABLE
+from app.core.agent.errors import ApiKeyMissing
 from app.core.agent.store import AgentSession, ProseBlock, SessionStore
 from app.core.agent.turns import TurnManager
 from app.core.agent.usage import LlmUsage
@@ -130,3 +134,82 @@ def test_an_engine_that_tracks_no_usage_books_nothing() -> None:
     silent = _FakeEngine([{"role": "assistant", "parts": [{"type": "text", "text": "ok"}]}])
 
     assert _spend_booked(store, sid, silent) == []
+
+
+class _HistoryKeepingEngine(_FakeEngine):
+    def __init__(self, asked: str, answered: str) -> None:
+        super().__init__([
+            {"role": "user", "parts": [{"type": "text", "text": asked}]},
+            {"role": "assistant", "parts": [{"type": "text", "text": answered}]},
+        ])
+        self.history: Any = None
+
+    async def stream_turn(self, prompt: str, *, message_history: Any, emit: Any, resume: Any):
+        self.history = message_history
+        return await super().stream_turn(
+            prompt, message_history=message_history, emit=emit, resume=resume,
+        )
+
+
+def test_a_turn_is_handed_the_earlier_turns_and_not_its_own_prompt() -> None:
+    store = SessionStore()
+    sid = store.create()
+    first = _HistoryKeepingEngine("first", "one")
+    second = _HistoryKeepingEngine("second", "two")
+
+    async def _drive() -> None:
+        tm = TurnManager()
+        for engine, asked in [(first, "first"), (second, "second")]:
+            turn_id = tm.start(engine=engine, store=store, session_id=sid, prompt=asked)
+            await tm._tasks[turn_id]
+
+    asyncio.run(_drive())
+
+    assert first.history == []
+    assert second.history == [
+        {"role": "user", "parts": [{"type": "text", "text": "first"}]},
+        {"role": "assistant", "parts": [{"type": "text", "text": "one"}]},
+    ]
+
+
+class _KeylessEngine:
+    def __init__(self) -> None:
+        self.last_usage = LlmUsage(cost_usd=0.10, calls=1, model="claude-haiku-5-5")
+
+    async def stream_turn(self, prompt: str, *, message_history: Any, emit: Any, resume: Any):
+        raise ApiKeyMissing(API_KEY_VARIABLE)
+
+
+class _BuggyEngine:
+    async def stream_turn(self, prompt: str, *, message_history: Any, emit: Any, resume: Any):
+        raise ValueError("a bug, not a model failure")
+
+
+def _run_one_turn(engine: Any, store: SessionStore, sid: str) -> list[dict[str, Any]]:
+    tm = TurnManager()
+
+    async def _drive() -> list[dict[str, Any]]:
+        turn_id = tm.start(engine=engine, store=store, session_id=sid, prompt="hi")
+        await tm._tasks[turn_id]
+        return [event async for event in tm.stream(turn_id)]
+
+    return asyncio.run(_drive())
+
+
+def test_a_missing_api_key_ends_the_turn_on_an_error_and_books_its_spend() -> None:
+    store = SessionStore()
+    sid = store.create()
+
+    events = _run_one_turn(_KeylessEngine(), store, sid)
+
+    assert [event["kind"] for event in events] == ["error", "done"]
+    assert API_KEY_VARIABLE in events[0]["text"]
+    assert [turn.usage.cost_usd for turn in AgentSession.load(sid).turn_spend] == [0.10]
+
+
+def test_a_bug_in_the_engine_escapes_the_turn() -> None:
+    store = SessionStore()
+    sid = store.create()
+
+    with pytest.raises(ValueError, match="a bug, not a model failure"):
+        _run_one_turn(_BuggyEngine(), store, sid)

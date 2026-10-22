@@ -4,6 +4,7 @@ Which provider is handed it, and how, is app.core.agent.registry's business.
 from __future__ import annotations
 
 import inspect
+import json
 import typing
 from dataclasses import dataclass
 from typing import Annotated, Any, Callable, Mapping
@@ -21,6 +22,35 @@ class BoundToolSpec:
     label: str
     json_schema: dict[str, Any]
     parse_arguments: Callable[[dict[str, Any]], dict[str, Any]]
+
+
+@dataclass(frozen=True)
+class ToolOutcome:
+    text: str
+    is_error: bool
+
+
+async def call_bound_tool(spec: BoundToolSpec, args: dict[str, Any]) -> ToolOutcome:
+    try:
+        result = spec.fn(**spec.parse_arguments(args))
+        # An async tool WAITS (get_run_status on a live run); awaiting keeps the app answering.
+        if inspect.isawaitable(result):
+            result = await result
+        return ToolOutcome(text=render_tool_text(result), is_error=False)
+    except Exception as exc:  # noqa: BLE001 — tool boundary: any tool failure is surfaced to the model as an error, never swallowed or faked
+        return ToolOutcome(text=f"ERROR: {exc}", is_error=True)
+
+
+def render_tool_text(value: object) -> str:
+    if isinstance(value, str):
+        return value
+    # by_alias + exclude_none: a Stage returns in the spec-dict form the agent writes it in.
+    dumpable = (
+        value.model_dump(mode="json", by_alias=True, exclude_none=True)
+        if isinstance(value, BaseModel)
+        else value
+    )
+    return json.dumps(dumpable, default=str, indent=2)
 
 
 def bind_by_signature(

@@ -19,6 +19,7 @@ import app.agents.tutorial.config  # noqa: F401 — registers the "tutorial" age
 import app.services.run as run_service
 from app.models.records.project import Project
 from app.core.agent.registry import build_engine, build_mcp_server
+from app.core.agent.sdk_engine import ClaudeAgentSdkEngine
 from app.core.agent.store import open_session_store
 from app.main import app as fastapi_app
 from app.models.stages.input_data import InputDataStage
@@ -66,6 +67,7 @@ def _seed_a_tour() -> dict[str, Any]:
 
 def test_build_engine_resolves_tutorial_with_only_the_tour_tools() -> None:
     engine = build_engine("tutorial", {"base_url": _BASE_URL})
+    assert isinstance(engine, ClaudeAgentSdkEngine)
     bare = {name.rsplit("__", 1)[-1] for name in engine._allowed_tools}
     assert bare == _EXPECTED_TOOLS
 
@@ -75,6 +77,7 @@ def test_the_tutorial_agent_gets_none_of_the_editing_tools() -> None:
         spec.name for spec in build_editing_tools(EditingContext(project_id="anything", base_url="http://reader.test/"))
     }
     engine = build_engine("tutorial", {"base_url": _BASE_URL})
+    assert isinstance(engine, ClaudeAgentSdkEngine)
     bare = {name.rsplit("__", 1)[-1] for name in engine._allowed_tools}
 
     assert "add_stage" in editing and "save_version" in editing  # the list is real

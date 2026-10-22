@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from app.agents.tutorial.prompt import TUTORIAL_OPENING_OFFERS
-from app.core.agent.sdk_engine import _read_offered_steps
+from app.core.agent.engine import read_offered_steps
 from app.core.agent.store import (
     OFFER_NEXT_STEPS,
     NextSteps,
@@ -48,17 +48,17 @@ def test_an_offer_part_renders_as_its_own_block_not_a_tool_row() -> None:
 
 
 def test_the_engine_turns_the_call_into_an_offer_rather_than_a_tool_call() -> None:
-    assert _read_offered_steps(OFFER_NEXT_STEPS, {"options": _SAID}) == NextSteps(
+    assert read_offered_steps(OFFER_NEXT_STEPS, {"options": _SAID}) == NextSteps(
         options=_OPTIONS)
 
 
 def test_any_other_tool_is_left_as_the_tool_call_it_is() -> None:
-    assert _read_offered_steps("run_workflow", {"options": _SAID}) is None
+    assert read_offered_steps("run_workflow", {"options": _SAID}) is None
 
 
 def test_arguments_that_are_not_offerable_draw_as_an_ordinary_tool_row() -> None:
     """An AI model that called it wrongly gets the error back, and the reader sees the call."""
-    assert _read_offered_steps(OFFER_NEXT_STEPS, {"options": ["only one"]}) is None
+    assert read_offered_steps(OFFER_NEXT_STEPS, {"options": ["only one"]}) is None
 
 
 @pytest.mark.parametrize("options", [

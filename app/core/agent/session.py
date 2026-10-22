@@ -6,8 +6,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.core.agent.engine import ChatEngine
 from app.core.agent.registry import OpeningTurn, build_engine, render_opening_turn
-from app.core.agent.sdk_engine import ClaudeAgentSdkEngine
 from app.core.agent.store import open_session_store, read_opening_message
 from app.core.ids import ID
 
@@ -39,7 +39,7 @@ def _opening_parts(opening: OpeningTurn) -> list[dict[str, Any]]:
 
 def build_session_engine(
     session_id: ID, base_url: str, page: str | None = None
-) -> ClaudeAgentSdkEngine:
+) -> ChatEngine:
     """The opening message comes off the stored transcript, so page and model read the same words."""
     data = _store.load(session_id)
     return build_engine(

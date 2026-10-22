@@ -7,6 +7,7 @@ from __future__ import annotations
 import app.agents.tutorial.config  # noqa: F401 — registers the "tutorial" agent
 from app.agents.tutorial.config import CONFIG as TUTORIAL_CONFIG
 from app.agents.tutorial.prompt import TUTORIAL_OPENING_MESSAGE
+from app.core.agent.sdk_engine import ClaudeAgentSdkEngine
 from app.core.agent.session import build_session_engine, create_agent_session
 from app.core.agent.store import open_session_store
 
@@ -46,6 +47,7 @@ def test_the_model_is_told_the_greeting_it_opened_with() -> None:
 
     engine = build_session_engine(sid, _BASE_URL)
 
+    assert isinstance(engine, ClaudeAgentSdkEngine)
     assert _stored_greeting(sid) in engine._system_prompt
 
 

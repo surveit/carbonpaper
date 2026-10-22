@@ -19,24 +19,26 @@ second.
 On Windows, run `./start` from Git Bash: it is a bash script, so PowerShell and
 `cmd` cannot run it. uv lands in `%USERPROFILE%\.local\bin`.
 
-## Signing in, so the LLM stages run
+## Signing in, so the LLM stages and the chat run
 
 The server boots and serves with no credential at all. What fails without one is
-`llm_transform` stages: `claude-agent-sdk` spawns the **Claude Code CLI**, which
-holds the credential, and no app module reads a key itself.
+whatever calls a model, and two credentials cover that.
+
+**The Claude Code CLI.** `llm_transform` stages, the guided tour's chat, generated
+stage tests and review guides, and the claim reviewers all go through it:
+`claude-agent-sdk` spawns the CLI, which holds the credential.
 
 `./start` installs that CLI if it is missing (with a y/n prompt — it is a large
 install and `npm install -g @anthropic-ai/claude-code` may already have put one
-there), then reports which credential the stages will reach for. Sign in once:
+there), then reports which credential the CLI will reach for. Sign in once:
 
 ```
 claude auth login
 ```
 
-That is a browser OAuth flow against a Claude subscription, and it is the only
-step `./start` will not do for you. `claude auth status` shows what it wrote.
-Once signed in there is nothing to export and nothing to put in a file — the
-CLI the SDK spawns finds its own credential.
+That is a browser OAuth flow against a Claude subscription. `claude auth status`
+shows what it wrote. Once signed in there is nothing to export and nothing to put
+in a file — the CLI the SDK spawns finds its own credential.
 
 Two environment variables override that CLI login, and both outrank it:
 
@@ -44,6 +46,19 @@ Two environment variables override that CLI login, and both outrank it:
 |---|---|
 | `ANTHROPIC_API_KEY` | The metered API, billed per token. Outranks everything below. |
 | `CLAUDE_CODE_OAUTH_TOKEN` | A one-year token from `claude setup-token`, on a subscription. For a machine with no browser — CI, a container. Never set it beside the API key: the key wins and the subscription silently goes unused. |
+
+**An API key, for the editing chat.** The editing agent's chat calls the Messages
+API itself, on `claude-haiku-5-5`, billed per token. It reads its key from
+`CARBON_PAPER_ANTHROPIC_API_KEY`; until that is set, every turn ends on an error
+naming the variable. `./start` reports whether it is set.
+
+```
+export CARBON_PAPER_ANTHROPIC_API_KEY=sk-ant-...
+```
+
+The name is not `ANTHROPIC_API_KEY` on purpose. That variable outranks the CLI
+login for every `claude` CLI that sees it, so setting it for the chat would move
+the stages — and any Claude Code on the machine — onto metered billing too.
 
 ## Where your state lives
 

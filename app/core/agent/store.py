@@ -146,9 +146,7 @@ class SessionStore:
         return {"session_id": session.id, **session.model_dump(exclude={"id"})}
 
     def load_messages(self, session_id: ID) -> list[dict[str, Any]]:
-        """Always empty: cross-turn memory comes from the CLI resume token, not from a replayed transcript."""
-        del session_id
-        return []
+        return AgentSession.load(session_id).messages
 
     def append_messages(self, session_id: ID, messages: list[dict[str, Any]]) -> None:
         """A turn contributes its own messages; the earlier turns stay on the page."""

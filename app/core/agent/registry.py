@@ -1,18 +1,21 @@
-"""Agent registry + engine builder — turns a registered AgentConfig into a
-ready-to-run ClaudeAgentSdkEngine. Nothing here knows about any specific agent;
-a concrete agent registers itself at import, so its module must be imported first.
-"""
+"""Builds the ChatEngine a registered AgentConfig's backend names. An agent registers at import."""
 from __future__ import annotations
 
-import inspect
-import json
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 
 from claude_agent_sdk import McpSdkServerConfig, SdkMcpTool, create_sdk_mcp_server, tool
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.core.agent.sdk_engine import MCP_SERVER_NAME, ClaudeAgentSdkEngine, ThinkingConfig
-from app.core.agent.bound_tool import BoundToolSpec
+from app.core.agent.api_engine import AnthropicApiEngine, ApiEffort
+from app.core.agent.engine import ChatEngine
+from app.core.agent.prices import validate_priced
+from app.core.agent.sdk_engine import (
+    CLI_MODEL,
+    MCP_SERVER_NAME,
+    ClaudeAgentSdkEngine,
+    ThinkingConfig,
+)
+from app.core.agent.bound_tool import BoundToolSpec, call_bound_tool
 from app.core.ids import ID
 
 
@@ -24,14 +27,30 @@ class OpeningTurn(BaseModel):
     offers: list[str] = []
 
 
+class CliBackend(BaseModel):
+    kind: Literal["cli"] = "cli"
+    model: str = CLI_MODEL
+    # None keeps the CLI's default; {"type": "disabled"} suits an agent
+    # whose prompt scripts its tools.
+    thinking: ThinkingConfig | None = None
+
+
+class ApiBackend(BaseModel):
+    kind: Literal["api"] = "api"
+    model: str
+    effort: ApiEffort
+
+    @field_validator("model")
+    @classmethod
+    def _validate_priced(cls, model: str) -> str:
+        validate_priced(model)
+        return model
+
+
 class AgentConfig(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
     system_prompt: str
-    # None leaves the CLI's own default in place. A scripted agent whose replies
-    # are short and whose tool sequence the prompt already dictates has nothing
-    # for a reasoning block to earn — {"type": "disabled"} skips straight to text.
-    thinking: ThinkingConfig | None = None
-    model: str = "sonnet"
+    backend: CliBackend | ApiBackend = Field(default_factory=CliBackend, discriminator="kind")
     context_schema: type[BaseModel]
     # What a surface calls this agent: a rail header, a new session's title.
     display_name: str
@@ -75,23 +94,41 @@ def render_opening_turn(agent_id: ID, context: dict[str, Any]) -> OpeningTurn | 
 
 def build_engine(
     agent_id: ID, context: dict[str, Any], *, opening_message: str = ""
-) -> ClaudeAgentSdkEngine:
+) -> ChatEngine:
     config, build_tools = _registry[agent_id]
     ctx = config.context_schema.model_validate(context)
     specs = build_tools(ctx)
+    system_prompt = render_system_prompt(config, ctx, opening_message)
+    tool_labels = {s.name: s.label for s in specs} | config.extra_tool_labels
+    if isinstance(config.backend, ApiBackend):
+        return AnthropicApiEngine(
+            system_prompt=system_prompt,
+            tools=specs,
+            tool_labels=tool_labels,
+            model=config.backend.model,
+            effort=config.backend.effort,
+        )
+    return _build_cli_engine(config.backend, system_prompt, specs, tool_labels)
+
+
+def _build_cli_engine(
+    backend: CliBackend,
+    system_prompt: str,
+    specs: list[BoundToolSpec],
+    tool_labels: dict[str, str],
+) -> ClaudeAgentSdkEngine:
     server, allowed, _wrapped = build_mcp_server(specs)
     return ClaudeAgentSdkEngine(
-        system_prompt=render_system_prompt(config, ctx, opening_message),
+        system_prompt=system_prompt,
         mcp_server=server,
         allowed_tools=allowed,
-        tool_labels={s.name: s.label for s in specs} | config.extra_tool_labels,
-        model=config.model,
-        thinking=config.thinking,
+        tool_labels=tool_labels,
+        model=backend.model,
+        thinking=backend.thinking,
     )
 
 
-# A turn is driven by the reader's message alone — the engine drops message_history and
-# the store replays nothing — so the session's first message reaches the model only here.
+# Neither engine replays a stored opening turn, so this is the only way the model sees it.
 _OPENED_WITH = "This conversation opened with these words from you, which the reader has read:"
 
 
@@ -127,38 +164,10 @@ def build_mcp_server(
 
 def build_sdk_tool(spec: BoundToolSpec) -> SdkMcpTool[Any]:
     async def handler(args: dict[str, Any]) -> dict[str, Any]:
-        try:
-            result = spec.fn(**spec.parse_arguments(args))
-            # An async tool is one that WAITS (get_run_status holding open on a
-            # running run); awaiting it here is what keeps the app answering
-            # everything else meanwhile.
-            if inspect.isawaitable(result):
-                result = await result
-            return as_tool_content(result)
-        except Exception as exc:  # noqa: BLE001 — tool boundary: any tool failure is surfaced to the model as an error, never swallowed or faked
-            return {
-                "content": [{"type": "text", "text": f"ERROR: {exc}"}],
-                "is_error": True,
-            }
+        outcome = await call_bound_tool(spec, args)
+        content: dict[str, Any] = {"content": [{"type": "text", "text": outcome.text}]}
+        if outcome.is_error:
+            content["is_error"] = True
+        return content
 
     return tool(spec.name, spec.description, spec.json_schema)(handler)
-
-
-def as_tool_content(value: object) -> dict[str, Any]:
-    if isinstance(value, str):
-        text = value
-    else:
-        # by_alias + exclude_none so a model carrying Stage(s) (e.g. a draft view)
-        # comes back to the agent in the SAME spec-dict form it writes stages
-        # in — aliased (`schema`, not `table_schema`) and without the unset-optional
-        # nulls, matching app.models.stage_to_spec_dict. Additive for every other
-        # model-returning tool: an alias-free model (DraftView, DraftEdit,
-        # SaveResult, ...) dumps equivalently (a dropped null re-parses as its
-        # default).
-        dumpable = (
-            value.model_dump(mode="json", by_alias=True, exclude_none=True)
-            if isinstance(value, BaseModel)
-            else value
-        )
-        text = json.dumps(dumpable, default=str, indent=2)
-    return {"content": [{"type": "text", "text": text}]}

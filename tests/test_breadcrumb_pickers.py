@@ -99,6 +99,7 @@ def test_the_project_rung_reads_as_the_name_and_switches_on_the_id(project: Path
 
     assert rung.label == "Congress roster"
     assert rung.picker_current == "demo"
+    assert rung.picker is not None
 
     body = client.get(rung.picker, params={"current": rung.picker_current}).text
 
@@ -112,6 +113,7 @@ def test_the_project_picker_omits_a_deleted_project(project: Path) -> None:
     project_service.Project(id="gone", name="gone", title="Deleted project").save()
     trail = breadcrumbs.build_section_crumbs("demo", label="Runs")
     rung = trail[1]
+    assert rung.picker is not None
 
     body = client.get(rung.picker, params={"current": rung.picker_current}).text
 
