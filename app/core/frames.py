@@ -329,6 +329,28 @@ def table_to_frame(table: pa.Table) -> pd.DataFrame:
     return table.to_pandas(types_mapper=_map_list_type_to_arrow_dtype)
 
 
+def type_null_struct_fields(table: pa.Table) -> pa.Table:
+    """Pandas cannot take rows of a struct holding an all-null field, so each becomes a string field."""
+    schema = pa.schema([field.with_type(_type_null_children(field.type)) for field in table.schema])
+    return table if schema.equals(table.schema) else table.cast(schema)
+
+
+def _type_null_children(arrow_type: pa.DataType) -> pa.DataType:
+    if pa.types.is_struct(arrow_type):
+        return pa.struct([_type_null_field(arrow_type.field(i)) for i in range(arrow_type.num_fields)])
+    if pa.types.is_list(arrow_type):
+        return pa.list_(_type_null_field(arrow_type.value_field))
+    if pa.types.is_large_list(arrow_type):
+        return pa.large_list(_type_null_field(arrow_type.value_field))
+    return arrow_type
+
+
+def _type_null_field(field: pa.Field) -> pa.Field:
+    if pa.types.is_null(field.type):
+        return field.with_type(pa.string())
+    return field.with_type(_type_null_children(field.type))
+
+
 def frame_to_table(frame: pd.DataFrame) -> pa.Table:
     """The inverse. `attrs` is dropped: pandas tries to JSON-serialize it into arrow
     metadata."""
