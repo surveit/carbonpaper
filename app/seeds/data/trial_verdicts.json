@@ -1,6 +1,6 @@
 {
  "name": "trial_verdicts",
- "document": "# Would a model reach the jury's verdict? Five federal criminal trials\n\n## The question\n\nGiven everything a jury heard up to the moment it left to deliberate, does a model reach the same verdict, count by count? Where it does not, the disagreement is the finding: each model verdict comes with reasoning that cites the transcript page by page, so a reader can see what the model weighed differently.\n\n## The trials\n\nFive federal criminal jury trials of one defendant each, whose complete trial transcripts (every day or volume, through the verdict) are in CourtListener's RECAP archive:\n\n| Trial | Court and case | Transcript files |\n|---|---|---|\n| United States v. Joos | W.D. Mo. 3:09-cr-05022 | ECF 80, 81 (2 days, 2010) |\n| United States v. Poke | N.D. Ill. 3:11-cr-50062 | ECF 141, 142 (2 volumes, 2013) |\n| United States v. Atta | S.D. Cal. 3:21-cr-01289 | ECF 114, 115 (2 days, 2022) |\n| United States v. Craft | W.D. Ky. 3:22-cr-00094 | ECF 97 to 101 (5 volumes, 2023, redacted) |\n| United States v. Tulali | D. Alaska 4:23-cr-00003 | ECF 152 to 156 (5 days, 2024) |\n\nThey are not a sample of trials. A transcript reaches RECAP only when someone pays for it, which mostly happens for an appeal, and only a conviction is appealed by the defendant; all five juries convicted. A model that always says guilty agrees with every one of them, so agreement here says little; the reasoning and any disagreement say more. `app/seeds/data/trial_verdicts/SOURCES.md` lists how they were found and which candidates were left out.\n\n## The steps\n\n1. **Read.** Each transcript file is read a page at a time; every page is a span, a quote with its address in the stored PDF.\n2. **Mark the verdict.** A model reads each whole transcript, verdict included, and quotes three things: the words recording the jury leaving to deliberate, the words reading the verdict, and any earlier passage that gives the outcome away, such as an index listing the verdict's page. It also lists the jury's verdict on each count. Every quote links to its page.\n3. **Strip the verdict.** Code keeps every page before the one where deliberations began, keeps that page only up to the quoted words, and drops each earlier page holding a quoted leak. Jury notes, the verdict, polling and sentencing talk are all after the cut.\n4. **Judge.** A model reads only the stripped transcript, with no caption or verdict, and decides each count as the judge instructed the jury: the law as the instructions state it, the presumption of innocence, proof beyond a reasonable doubt. Its reasoning cites the transcript by quote; each citation links to the page it came from.\n5. **Recall check.** A model is shown only the case caption and asked whether it remembers how the jury decided. A trial it remembers is flagged: agreement there may come from memory, not the transcript.\n6. **Compare.** Code matches the two verdicts by count number and lists every count where they differ.\n7. **Check the ground truth.** Step 2 takes the jury's verdict from the transcript, so a second source checks it: a different model (claude-sonnet-5) reads each trial's Judgment in a Criminal Case, a separate filing on the docket, and lists the counts the defendant was found guilty or not guilty on; code compares that with step 2's reading, count by count. Poke's judgment is not in RECAP, so its reading goes unchecked and says so.\n\n## What the model does not have\n\nThe jury saw witnesses and exhibits; the model reads a transcript. An exhibit that was shown but never read aloud is missing, and so is demeanor. The judging prompt tells the model to say where that gap matters.\n\n## Running it\n\nThe model steps read up to about 860 pages in one call, so each can run for many minutes; set `CARBON_PAPER_LLM_TIMEOUT_S` above its 180-second default before running.\n",
+ "document": "# Would a model reach the jury's verdict? Nine federal criminal trials\n\n## The question\n\nGiven everything a jury heard up to the moment it left to deliberate, does a model reach the same verdict, count by count? Where it does not, the disagreement is the finding: each model verdict comes with reasoning that cites the transcript page by page, so a reader can see what the model weighed differently.\n\n## The trials\n\nNine federal criminal jury trials of one defendant each, whose trial transcripts (every day or volume, through the verdict) are in CourtListener's RECAP archive, apart from sealed parts that `SOURCES.md` lists, such as two trials' jury selection:\n\n| Trial | Court and case | Transcript files |\n|---|---|---|\n| United States v. Joos | W.D. Mo. 3:09-cr-05022 | ECF 80, 81 (2 days, 2010) |\n| United States v. Poke | N.D. Ill. 3:11-cr-50062 | ECF 141, 142 (2 volumes, 2013) |\n| United States v. Atta | S.D. Cal. 3:21-cr-01289 | ECF 114, 115 (2 days, 2022) |\n| United States v. Craft | W.D. Ky. 3:22-cr-00094 | ECF 97 to 101 (5 volumes, 2023, redacted) |\n| United States v. Tulali | D. Alaska 4:23-cr-00003 | ECF 152 to 156 (5 days, 2024) |\n| United States v. Brown | N.D. Ill. 1:14-cr-00674 | ECF 137, 123 (closing arguments, then volumes 1 to 5B, 2015) |\n| United States v. Branch | N.D. Ala. 2:15-cr-00154 | ECF 42 to 46 (5 volumes, 2015) |\n| United States v. Bryant | M.D. Tenn. 3:18-cr-00144 | ECF 113 to 116 (4 volumes, 2020; jury selection sealed) |\n| United States v. Reagor | N.D. Tex. 2:21-cr-00025 | ECF 163, 165, 167, 168 (4 volumes, 2021; jury selection sealed) |\n\nThey are not a sample of trials. A transcript reaches RECAP only when someone pays for it, which mostly happens for an appeal, and only a conviction is appealed by the defendant. The first five juries convicted on every count, so a model that always says guilty agrees with all of them. The last four were searched for because their juries acquitted on some counts: together they decided 27 counts, 22 of them not guilty, so an always-guilty model disagrees with most of their counts. The reasoning and any disagreement say more than agreement. `app/seeds/data/trial_verdicts/SOURCES.md` lists how they were found and which candidates were left out.\n\n## The steps\n\n1. **Read.** Each transcript file is read a page at a time; every page is a span, a quote with its address in the stored PDF.\n2. **Mark the verdict.** A model reads each whole transcript, verdict included, and quotes three things: the words recording the jury leaving to deliberate, the words reading the verdict, and any earlier passage that gives the outcome away, such as an index listing the verdict's page. It also lists the jury's verdict on each count. Every quote links to its page.\n3. **Strip the verdict.** Code keeps every page before the one where deliberations began, keeps that page only up to the quoted words, and drops each earlier page holding a quoted leak. Jury notes, the verdict, polling and sentencing talk are all after the cut.\n4. **Judge.** A model reads only the stripped transcript, with no caption or verdict, and decides each count as the judge instructed the jury: the law as the instructions state it, the presumption of innocence, proof beyond a reasonable doubt. Its reasoning cites the transcript by quote; each citation links to the page it came from.\n5. **Recall check.** A model is shown only the case caption and asked whether it remembers how the jury decided. A trial it remembers is flagged: agreement there may come from memory, not the transcript.\n6. **Compare.** Code matches the two verdicts by count number and lists every count where they differ.\n7. **Check the ground truth.** Step 2 takes the jury's verdict from the transcript, so a second source checks it: a different model (claude-sonnet-5) reads each trial's Judgment in a Criminal Case, a separate filing on the docket, and lists the counts the defendant was found guilty or not guilty on; code compares that with step 2's reading, count by count. The judgments of Poke, Brown, Branch, Bryant and Reagor are not in RECAP, so their readings go unchecked and say so.\n\n## What the model does not have\n\nThe jury saw witnesses and exhibits; the model reads a transcript. An exhibit that was shown but never read aloud is missing, and so is demeanor. The judging prompt tells the model to say where that gap matters.\n\n## Running it\n\nThe model steps read up to about 930 pages (about 1.5 million characters) in one call, so each can run for many minutes; set `CARBON_PAPER_LLM_TIMEOUT_S` above its 180-second default before running.\n",
  "model": "opus",
  "source": "hand-written",
  "data_model": {
@@ -30,11 +30,11 @@
    "id": "input_transcripts",
    "type": "input_data",
    "row_type_id": "transcript_file",
-   "description": "Reads the transcript files of five federal criminal jury trials from the committed mirror of CourtListener's RECAP archive, one row per file.",
+   "description": "Reads the transcript files of nine federal criminal jury trials from the committed mirror of CourtListener's RECAP archive, one row per file.",
    "inputs": [],
    "cache": false,
    "compiler_notes": [
-    "Each trial's every day or volume is listed, in order, as the docket's own transcript entries name them; app/seeds/data/trial_verdicts/SOURCES.md says how they were chosen."
+    "Each trial's every day or volume is listed, in order, as the docket's own transcript entries name them, except that Brown's closing arguments come first: its trial volumes (ECF 123) mark them as not transcribed, the excerpt filed later (ECF 137) holds them, and placed first they stay before the cut where deliberations began. app/seeds/data/trial_verdicts/SOURCES.md says how they were chosen."
    ],
    "connector": {
     "kind": "recap_files",
@@ -199,6 +199,156 @@
        "ecf": "156",
        "part": 5,
        "description": "Trial by Jury - Trial Day 5, held April 19, 2024"
+      },
+      {
+       "path": "recap/gov.uscourts.ilnd.303368.137.0.pdf",
+       "court": "ilnd",
+       "case_number": "1:14-cr-00674",
+       "case_name": "United States v. Brown",
+       "docket_id": 5620135,
+       "ecf": "137",
+       "part": 1,
+       "description": "Closing Arguments during Jury Trial, held October 22, 2015 (excerpt)"
+      },
+      {
+       "path": "recap/gov.uscourts.ilnd.303368.123.0.pdf",
+       "court": "ilnd",
+       "case_number": "1:14-cr-00674",
+       "case_name": "United States v. Brown",
+       "docket_id": 5620135,
+       "ecf": "123",
+       "part": 2,
+       "description": "Jury Trial, Vol 1 - Vol 5B, held October 19 to 23, 2015"
+      },
+      {
+       "path": "recap/gov.uscourts.tnmd.74996/gov.uscourts.tnmd.74996.113.0.pdf",
+       "court": "tnmd",
+       "case_number": "3:18-cr-00144",
+       "case_name": "United States v. Bryant",
+       "docket_id": 28613289,
+       "ecf": "113",
+       "part": 1,
+       "description": "Trial Volume 1B, held January 7, 2020"
+      },
+      {
+       "path": "recap/gov.uscourts.tnmd.74996/gov.uscourts.tnmd.74996.114.0.pdf",
+       "court": "tnmd",
+       "case_number": "3:18-cr-00144",
+       "case_name": "United States v. Bryant",
+       "docket_id": 28613289,
+       "ecf": "114",
+       "part": 2,
+       "description": "Trial Volume 2, held January 8, 2020"
+      },
+      {
+       "path": "recap/gov.uscourts.tnmd.74996/gov.uscourts.tnmd.74996.115.0.pdf",
+       "court": "tnmd",
+       "case_number": "3:18-cr-00144",
+       "case_name": "United States v. Bryant",
+       "docket_id": 28613289,
+       "ecf": "115",
+       "part": 3,
+       "description": "Trial Volume 3, held January 9, 2020"
+      },
+      {
+       "path": "recap/gov.uscourts.tnmd.74996/gov.uscourts.tnmd.74996.116.0.pdf",
+       "court": "tnmd",
+       "case_number": "3:18-cr-00144",
+       "case_name": "United States v. Bryant",
+       "docket_id": 28613289,
+       "ecf": "116",
+       "part": 4,
+       "description": "Trial Volume 4, held January 10, 2020"
+      },
+      {
+       "path": "recap/gov.uscourts.alnd.155347/gov.uscourts.alnd.155347.42.0.pdf",
+       "court": "alnd",
+       "case_number": "2:15-cr-00154",
+       "case_name": "United States v. Branch",
+       "docket_id": 4127087,
+       "ecf": "42",
+       "part": 1,
+       "description": "Jury Trial, Vol. I of V, held August 10, 2015"
+      },
+      {
+       "path": "recap/gov.uscourts.alnd.155347/gov.uscourts.alnd.155347.43.0.pdf",
+       "court": "alnd",
+       "case_number": "2:15-cr-00154",
+       "case_name": "United States v. Branch",
+       "docket_id": 4127087,
+       "ecf": "43",
+       "part": 2,
+       "description": "Jury Trial, Vol. II of V, held August 11, 2015"
+      },
+      {
+       "path": "recap/gov.uscourts.alnd.155347/gov.uscourts.alnd.155347.44.0.pdf",
+       "court": "alnd",
+       "case_number": "2:15-cr-00154",
+       "case_name": "United States v. Branch",
+       "docket_id": 4127087,
+       "ecf": "44",
+       "part": 3,
+       "description": "Jury Trial, Vol. III of V, held August 12, 2015"
+      },
+      {
+       "path": "recap/gov.uscourts.alnd.155347/gov.uscourts.alnd.155347.45.0.pdf",
+       "court": "alnd",
+       "case_number": "2:15-cr-00154",
+       "case_name": "United States v. Branch",
+       "docket_id": 4127087,
+       "ecf": "45",
+       "part": 4,
+       "description": "Jury Trial, Vol. IV of V, held August 13, 2015"
+      },
+      {
+       "path": "recap/gov.uscourts.alnd.155347/gov.uscourts.alnd.155347.46.0.pdf",
+       "court": "alnd",
+       "case_number": "2:15-cr-00154",
+       "case_name": "United States v. Branch",
+       "docket_id": 4127087,
+       "ecf": "46",
+       "part": 5,
+       "description": "Jury Trial, Vol. V of V, held August 14, 2015"
+      },
+      {
+       "path": "recap/gov.uscourts.txnd.347162/gov.uscourts.txnd.347162.163.0.pdf",
+       "court": "txnd",
+       "case_number": "2:21-cr-00025",
+       "case_name": "United States v. Reagor",
+       "docket_id": 59845457,
+       "ecf": "163",
+       "part": 1,
+       "description": "Criminal Trial by Jury, Volume I of IV, held October 12, 2021"
+      },
+      {
+       "path": "recap/gov.uscourts.txnd.347162/gov.uscourts.txnd.347162.165.0.pdf",
+       "court": "txnd",
+       "case_number": "2:21-cr-00025",
+       "case_name": "United States v. Reagor",
+       "docket_id": 59845457,
+       "ecf": "165",
+       "part": 2,
+       "description": "Criminal Trial by Jury, Volume II of IV, held October 13, 2021"
+      },
+      {
+       "path": "recap/gov.uscourts.txnd.347162/gov.uscourts.txnd.347162.167.0.pdf",
+       "court": "txnd",
+       "case_number": "2:21-cr-00025",
+       "case_name": "United States v. Reagor",
+       "docket_id": 59845457,
+       "ecf": "167",
+       "part": 3,
+       "description": "Criminal Trial by Jury, Volume III of IV (Charge Conference), held October 13, 2021"
+      },
+      {
+       "path": "recap/gov.uscourts.txnd.347162/gov.uscourts.txnd.347162.168.0.pdf",
+       "court": "txnd",
+       "case_number": "2:21-cr-00025",
+       "case_name": "United States v. Reagor",
+       "docket_id": 59845457,
+       "ecf": "168",
+       "part": 4,
+       "description": "Criminal Trial by Jury, Volume IV of IV, held October 14 and 15, 2021"
       }
      ],
      "cache_dir": "app/seeds/data/trial_verdicts"
@@ -1081,7 +1231,7 @@
    "id": "input_records",
    "type": "input_data",
    "row_type_id": "transcript_file",
-   "description": "Reads each trial's judgment from the same mirror, one row per file; Poke's judgment is not in RECAP.",
+   "description": "Reads each trial's judgment from the same mirror, one row per file; the judgments of Poke, Brown, Branch, Bryant and Reagor are not in RECAP.",
    "inputs": [],
    "cache": false,
    "compiler_notes": [

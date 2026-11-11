@@ -342,6 +342,23 @@ def test_a_quote_in_no_listed_span_is_re_asked_then_fails_the_row(monkeypatch):
         "'the plea was rejected'")
 
 
+def test_a_quote_running_from_one_listed_span_into_the_next_is_re_asked_naming_the_break(
+    monkeypatch,
+):
+    page, at = _page_span(), PAGE_TEXT.index("FOR THE NORTHERN DISTRICT")
+    halves = [narrow_span(page, PAGE_TEXT[:at]).model_dump(),
+              narrow_span(page, PAGE_TEXT[at:]).model_dump()]
+    calls = _script_replies(
+        monkeypatch, {"quote": "UNITED STATES DISTRICT COURT\nFOR THE NORTHERN DISTRICT"},
+        {"quote": "the plea was rejected"}, {"quote": "FORT WORTH DIVISION"})
+
+    output = _run(_quoting_stage(quoted_type="list[span]", max_retries=2), [halves])
+
+    assert "runs from the end of one into the start of the next" in calls[1]["correction"]
+    assert calls[2]["correction"].startswith("quote not found: 'the plea was rejected'")
+    assert not contribution_of(output).row_errors
+
+
 def test_listed_spans_that_read_the_same_fail_the_row_without_a_re_ask(monkeypatch):
     header = "Case 4:21-cr-00005-O"
     page = _page_span()

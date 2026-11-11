@@ -17,7 +17,9 @@ from app.packs.docket.mirror import Mirror, resolve_mirror_dir
 
 _TIMEOUT_S = 60
 
-RecapPath = Annotated[str, StringConstraints(pattern=r"^recap/gov\.uscourts\.[a-z0-9]+\.[0-9]+/[^/]+\.pdf$")]
+# A file in its case's directory, or at the older flat path <case>.<entry>.<attachment>.pdf.
+RecapPath = Annotated[str, StringConstraints(
+    pattern=r"^recap/gov\.uscourts\.[a-z0-9]+\.[0-9]+(?:/[^/]+|\.[0-9]+\.[0-9]+)\.pdf$")]
 
 
 class RecapFile(BaseModel):
