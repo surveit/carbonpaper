@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable, Mapping, Sequence
 from functools import partial
+from itertools import pairwise
 from typing import Any, NamedTuple
 
 from app.core.errors import QuoteAmbiguous, QuoteRefused
@@ -132,6 +133,11 @@ def _narrow_to_one_place(
     """The minted quote is the parent's own characters, whatever spacing the reply used."""
     quote, prefix, suffix = (_normalize(text) for text in (reply.quote, reply.prefix, reply.suffix))
     found = _find_places(parents, quote)
+    if not found and _is_split_across_neighbours(parents, quote):
+        raise _refuse_quote(
+            "quote runs across two consecutive strings", where, reply.quote,
+            "A quote must come from one string of the list; this one runs from the end of one "
+            "into the start of the next. Quote only the words within one string.")
     framed = [
         place for place in found
         if _is_framed_by(place.parent.page.text, place.start, place.start + len(quote),
@@ -149,6 +155,16 @@ def _find_places(parents: Sequence[_NormalizedSpan], quote: str) -> list[_Place]
         for parent in parents
         for start in find_occurrences(parent.page.text, quote)
     ]
+
+
+def _is_split_across_neighbours(parents: Sequence[_NormalizedSpan], quote: str) -> bool:
+    # Splits only at a space of the normalized quote, so neither part cuts a word in two.
+    splits = [(quote[:at], quote[at + 1:]) for at in find_occurrences(quote, " ")]
+    return any(
+        head in first.page.text and tail in second.page.text
+        for first, second in pairwise(parents)
+        for head, tail in splits
+    )
 
 
 def _mint_at(place: _Place, quote: str, prefix: str, suffix: str) -> Span:
