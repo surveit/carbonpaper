@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 
 import pytest
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from app.core.errors import QuoteAmbiguous, QuoteNotInText
 from app.models.locators import CellAt, Locator, PageCharRange
@@ -121,9 +121,26 @@ def test_a_subclass_keeps_its_added_fields_through_narrowing_and_a_dump() -> Non
 
 
 # ── the span column type ─────────────────────────────────────────────────────
-def test_quoted_from_is_refused_off_a_span_column() -> None:
+@pytest.mark.parametrize("column_type", ["str", "list[str]", "list[list[span]]"])
+def test_quoted_from_is_refused_off_a_span_column(column_type: str) -> None:
     with pytest.raises(ValidationError, match="quoted_from is only valid on type 'span'"):
-        Column(name="basis", type="str", nullable=True, quoted_from="page")
+        Column(name="basis", type=column_type, nullable=True, quoted_from="page")
+
+
+def test_a_list_reply_holds_quotes_and_null_only_where_the_column_is_nullable() -> None:
+    def build_reply_model(nullable: bool) -> type[BaseModel]:
+        return TableSchema(columns=[Column(
+            name="basis", type="list[span]", nullable=nullable, quoted_from="page",
+        )]).to_reply_model("reply")
+
+    reply = build_reply_model(False).model_validate({"basis": [{"quote": "the plea"}]})
+    assert getattr(reply, "basis") == [SpanReply(quote="the plea")]
+    assert getattr(build_reply_model(False).model_validate({"basis": []}), "basis") == []
+    assert getattr(build_reply_model(True).model_validate({"basis": None}), "basis") is None
+    with pytest.raises(ValidationError):
+        build_reply_model(False).model_validate({"basis": None})
+    assert build_reply_model(False).model_fields["basis"].description == (
+        "Each item a verbatim quote from `page`, never a paraphrase.")
 
 
 def test_a_frame_row_holds_a_whole_span() -> None:

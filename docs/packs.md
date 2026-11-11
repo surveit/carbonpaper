@@ -52,6 +52,12 @@ both, and a relative `cache_dir` names a directory of the checkout, such as the 
 `app/seeds/data/boeing`. A filing the archive or mirror lacks refuses the run. `ATTRIBUTION.md` holds the terms
 line.
 
+`recap_files`, in the same pack, reads files named by their storage path, one row per file, and
+reads no listing. Each file carries the case facts its workflow states: `case_name`, `court`,
+`case_number`, `docket_id`, `ecf`, `part` (its place among its case's files, from 1) and
+`description`. It reads the same `cache_dir` mirror as `recap_docket`, and refuses a path named
+twice or two files of one case at one `part`.
+
 ## The opinions pack
 
 `courtlistener_opinions` reads an anonymous CourtListener opinion search (`type=o`: `query`,

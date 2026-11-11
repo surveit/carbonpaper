@@ -57,7 +57,8 @@ def _bound_sources(file_id: str = STORED_FILE_ID) -> dict[str, InputBinding]:
 
 
 def _quoting_stage(
-    *, quoted_type: str = "span", batch_size: int = 1, max_retries: int = 1
+    *, quoted_type: str = "span", added_type: str = "span", batch_size: int = 1,
+    max_retries: int = 1,
 ) -> Stage:
     return parse_stage({
         "id": "extract", "description": "Quote the court", "type": "llm_transform",
@@ -66,7 +67,8 @@ def _quoting_stage(
             "form": "extends",
             "reads": [{"input": "pages", "columns": [
                 {"name": "page", "type": quoted_type, "nullable": True}]}],
-            "adds": [{"name": "basis", "type": "span", "nullable": True, "quoted_from": "page"}]},
+            "adds": [{"name": "basis", "type": added_type, "nullable": True,
+                      "quoted_from": "page"}]},
         "llm": {"prompt_data_template": TEMPLATE, "batch_size": batch_size,
                 "max_retries": max_retries},
     })
@@ -81,7 +83,7 @@ def _run(stage: Stage, cells: list[Any], ctx: RunContext | None = None) -> Stage
     return output
 
 
-def _script_replies(monkeypatch, *quotes: dict[str, str]) -> list[dict[str, Any]]:
+def _script_replies(monkeypatch, *quotes: object) -> list[dict[str, Any]]:
     """Answers each call with the next reply; returns what each call was shown."""
     calls: list[dict[str, Any]] = []
 
@@ -172,7 +174,7 @@ def test_a_quote_found_twice_is_re_asked_and_a_prefix_picks_one(monkeypatch):
 
     assert calls[1]["correction"] == (
         f"quote appears 2 times: {CASE_HEADER!r}. Give a prefix or suffix, copied exactly, that "
-        "tells them apart.")
+        "tells them apart, or quote more words.")
     (span,) = _minted(output)
     assert span is not None and isinstance(span.locator, PageCharRange)
     assert span.locator.start == PAGE_TEXT.rindex("Case 4:21-cr-00005-O")
@@ -234,7 +236,7 @@ def test_a_page_read_pages_read_is_quoted_and_the_span_verifies_against_the_stor
     assert find_span_issues(output.table, schema, ctx.bound_sources, SourceTextCache()) == []
 
 
-# ── a list[span] column: the quote must be one of the spans shown ──
+# ── a list[span] column: a listed quote whole, or words inside one listed span ──
 def _listed_spans() -> list[dict[str, Any]]:
     page = _page_span()
     return [narrow_span(page, "FORT WORTH DIVISION").model_dump(),
@@ -251,14 +253,93 @@ def test_a_quote_of_one_listed_span_is_completed_as_that_span(monkeypatch):
         page='[\n  "FORT WORTH DIVISION",\n  "THE BOEING COMPANY"\n]')
 
 
-def test_a_quote_that_is_no_listed_span_is_re_asked_then_fails_the_row(monkeypatch):
-    calls = _script_replies(monkeypatch, {"quote": "BOEING"}, {"quote": "BOEING"})
+def test_a_quote_inside_one_listed_span_is_narrowed_there_and_verifies(monkeypatch):
+    _script_replies(monkeypatch, {"quote": "BOEING"})
+    stage = _quoting_stage(quoted_type="list[span]")
+
+    output = _run(stage, [_listed_spans()])
+
+    assert _minted(output) == [narrow_span(Span.model_validate(_listed_spans()[1]), "BOEING")]
+    _verify(output, stage)
+
+
+def test_words_inside_a_listed_page_are_minted_as_the_page_s_own_characters(monkeypatch):
+    _script_replies(monkeypatch, {
+        "quote": "IN THE UNITED STATES DISTRICT COURT FOR THE NORTHERN DISTRICT OF TEXAS"})
+    stage = _quoting_stage(quoted_type="list[span]")
+
+    output = _run(stage, [[_listed_spans()[0], _page_span().model_dump()]])
+
+    (span,) = _minted(output)
+    assert span is not None
+    assert span.quote == "IN THE UNITED STATES DISTRICT COURT \nFOR THE NORTHERN DISTRICT OF TEXAS"
+    _verify(output, stage)
+
+
+def test_a_whole_listed_quote_wins_over_the_same_words_inside_another_listed_span(monkeypatch):
+    page = _page_span()
+    listed = narrow_span(page, "THE BOEING COMPANY", suffix="   \n")
+    _script_replies(monkeypatch, {"quote": "THE BOEING COMPANY"})
+
+    output = _run(_quoting_stage(quoted_type="list[span]"),
+                  [[page.model_dump(), listed.model_dump()]])
+
+    assert _minted(output) == [listed]
+
+
+def test_words_inside_two_listed_spans_are_re_asked_and_a_prefix_picks_one(monkeypatch):
+    page = _page_span()
+    first = narrow_span(page, "FORT WORTH DIVISION \n \nUNITED STATES OF AMERICA")
+    second = narrow_span(page, "THE UNITED STATES OF AMERICA")
+    calls = _script_replies(monkeypatch, {"quote": "OF AMERICA"},
+                            {"quote": "OF AMERICA", "prefix": "THE UNITED STATES"})
+    stage = _quoting_stage(quoted_type="list[span]")
+
+    output = _run(stage, [[first.model_dump(), second.model_dump()]])
+
+    assert calls[1]["correction"] == (
+        "quote appears 2 times: 'OF AMERICA'. Give a prefix or suffix, copied exactly, that "
+        "tells them apart, or quote more words.")
+    assert _minted(output) == [narrow_span(second, "OF AMERICA", prefix="THE UNITED STATES ")]
+    _verify(output, stage)
+
+
+def test_words_inside_two_listed_spans_fail_the_row_naming_the_column(monkeypatch):
+    page = _page_span()
+    both = [narrow_span(page, "FORT WORTH DIVISION \n \nUNITED STATES OF AMERICA").model_dump(),
+            narrow_span(page, "THE UNITED STATES OF AMERICA").model_dump()]
+    _script_replies(monkeypatch, {"quote": "OF AMERICA"})
+
+    output = _run(_quoting_stage(quoted_type="list[span]", max_retries=0), [both])
+
+    (error,) = contribution_of(output).row_errors
+    assert error["message"] == (
+        "reply rejected after 1 attempt(s): quote appears 2 times in the 2 spans of `page`: "
+        "'OF AMERICA'")
+
+
+def test_a_span_listed_twice_holds_its_words_at_one_place(monkeypatch):
+    _script_replies(monkeypatch, {"quote": "BOEING"})
+    boeing = _listed_spans()[1]
+
+    output = _run(_quoting_stage(quoted_type="list[span]", max_retries=0), [[boeing, boeing]])
+
+    assert _minted(output) == [narrow_span(Span.model_validate(boeing), "BOEING")]
+
+
+def test_a_quote_in_no_listed_span_is_re_asked_then_fails_the_row(monkeypatch):
+    calls = _script_replies(monkeypatch, {"quote": "the plea was rejected"},
+                            {"quote": "the plea was rejected"})
 
     output = _run(_quoting_stage(quoted_type="list[span]", max_retries=1), [_listed_spans()])
 
     assert calls[1]["correction"] == (
-        "quote is none of the 2 quotes in `page`; copy one of them whole: 'BOEING'")
-    assert len(contribution_of(output).row_errors) == 1
+        "quote not found: 'the plea was rejected'. Copy the words exactly as they appear in the "
+        "text you were shown.")
+    (error,) = contribution_of(output).row_errors
+    assert error["message"] == (
+        "reply rejected after 2 attempt(s): quote not found in the 2 spans of `page`: "
+        "'the plea was rejected'")
 
 
 def test_listed_spans_that_read_the_same_fail_the_row_without_a_re_ask(monkeypatch):
@@ -275,6 +356,62 @@ def test_listed_spans_that_read_the_same_fail_the_row_without_a_re_ask(monkeypat
     assert error["message"] == (
         f"the 2 quotes in `page` reading {header!r} are indistinguishable: they sit at different "
         "places, and a quote cannot pick one")
+
+
+# ── a list[span] added column: every quote in the reply is minted ──
+def _minted_lists(output: StageOutput) -> list[list[Span] | None]:
+    return [None if row["basis"] is None else [Span.model_validate(one) for one in row["basis"]]
+            for row in list_table_rows(output.table)]
+
+
+@pytest.mark.parametrize("quoted_type", ["span", "list[span]"])
+def test_a_list_of_quotes_is_minted_one_span_per_quote_and_verifies(monkeypatch, quoted_type):
+    _script_replies(monkeypatch, [{"quote": "FORT WORTH DIVISION"}, {"quote": "BOEING"}])
+    stage = _quoting_stage(quoted_type=quoted_type, added_type="list[span]")
+    parent = _listed_spans() if quoted_type == "list[span]" else _page_span().model_dump()
+
+    output = _run(stage, [parent])
+
+    (spans,) = _minted_lists(output)
+    assert spans is not None
+    assert [span.quote for span in spans] == ["FORT WORTH DIVISION", "BOEING"]
+    assert not contribution_of(output).row_errors
+    _verify(output, stage)
+
+
+def test_a_quote_in_a_list_that_is_not_found_is_re_asked_naming_that_quote(monkeypatch):
+    calls = _script_replies(
+        monkeypatch, [{"quote": "FORT WORTH DIVISION"}, {"quote": "the plea was rejected"}],
+        [{"quote": "FORT WORTH DIVISION"}])
+
+    output = _run(_quoting_stage(added_type="list[span]"), [_page_span().model_dump()])
+
+    assert calls[1]["correction"] == (
+        "quote not found: 'the plea was rejected'. Copy the words exactly as they appear in the "
+        "text you were shown.")
+    (spans,) = _minted_lists(output)
+    assert spans is not None and [span.quote for span in spans] == ["FORT WORTH DIVISION"]
+
+
+@pytest.mark.parametrize("parent", [_page_span().model_dump(), None])
+def test_an_empty_list_of_quotes_is_an_answer(monkeypatch, parent):
+    _script_replies(monkeypatch, [])
+
+    output = _run(_quoting_stage(added_type="list[span]"), [parent])
+
+    assert _minted_lists(output) == [[]]
+    assert not contribution_of(output).row_errors
+
+
+def test_a_list_of_quotes_is_minted_on_the_batched_path(monkeypatch):
+    monkeypatch.setattr(lt, "call_llm_batch", lambda *a, **k: script_judgment({"results": [
+        {"row_number": 0, "basis": [{"quote": "FORT WORTH DIVISION"}]}]}))
+
+    output = _run(_quoting_stage(added_type="list[span]", batch_size=2),
+                  [_page_span().model_dump()])
+
+    (spans,) = _minted_lists(output)
+    assert spans is not None and [span.quote for span in spans] == ["FORT WORTH DIVISION"]
 
 
 # ── batch_size > 1 ──
@@ -314,13 +451,15 @@ def test_the_stage_panel_shows_the_answer_as_a_verbatim_quote_from_its_column(tm
     assert "A verbatim quote from <code>page</code>." in answer_shape
 
 
+@pytest.mark.parametrize("added_type", ["span", "list[span]"])
 @pytest.mark.parametrize("batch_size", [1, 2])
-def test_a_null_quote_leaves_the_span_null(monkeypatch, batch_size):
+def test_a_null_quote_leaves_the_span_null(monkeypatch, batch_size, added_type):
     monkeypatch.setattr(lt, "call_llm", lambda *a, **k: script_judgment({"basis": None}))
     monkeypatch.setattr(lt, "call_llm_batch", lambda *a, **k: script_judgment(
         {"results": [{"row_number": 0, "basis": None}]}))
 
-    output = _run(_quoting_stage(batch_size=batch_size), [_page_span().model_dump()])
+    output = _run(_quoting_stage(added_type=added_type, batch_size=batch_size),
+                  [_page_span().model_dump()])
 
-    assert _minted(output) == [None]
+    assert _minted_lists(output) == [None]
     assert not contribution_of(output).row_errors

@@ -8,3 +8,6 @@ docker-entrypoint.sh text eol=lf
 
 # The Boeing mirror is checked byte for byte against the sha256 its manifest recorded.
 app/seeds/data/boeing/docket/** binary
+
+# The trial transcript mirror is checked byte for byte against the sha256 its manifest recorded.
+app/seeds/data/trial_verdicts/pdfs/** binary

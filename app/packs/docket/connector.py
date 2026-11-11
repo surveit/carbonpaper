@@ -1,30 +1,23 @@
 """recap_docket: a docket's filings as CourtListener's RECAP archive holds them, one row per file."""
 from __future__ import annotations
 
-from collections import defaultdict
-from dataclasses import dataclass
 from datetime import date
-from pathlib import Path
 from typing import Annotated, Iterator, Self
 
-from pydantic import (
-    AliasChoices, BaseModel, ConfigDict, Field, StringConstraints, ValidationError,
-    model_validator,
-)
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
-from app.core.errors import MirrorDisagrees, SourceUnavailable
-from app.core.files import compute_sha256
-from app.core.paths import repo_root
+from app.core.errors import SourceUnavailable
 from app.core.url_fetch import open_url, read_url
 from app.models.connectors import (
     AcquiredBytes, ConnectorParams, ConnectorSpec, MetadataValue, MirroredBytes,
 )
 from app.models.schema import Column
+from app.packs.docket.mirror import MIRROR_MANIFEST as MIRROR_MANIFEST
+from app.packs.docket.mirror import Mirror, resolve_mirror_dir
 
 COURTLISTENER_API = "https://www.courtlistener.com/api/rest/v4/"
 RECAP_STORAGE = "https://storage.courtlistener.com/"
 USER_AGENT = "carbonpaper (https://github.com/surveit/carbonpaper)"
-MIRROR_MANIFEST = "manifest.jsonl"
 _TIMEOUT_S = 60
 
 EcfNumber = Annotated[str, StringConstraints(pattern=r"^[1-9][0-9]*(-[1-9][0-9]*)?$")]
@@ -48,15 +41,10 @@ class RecapDocketParams(ConnectorParams):
 
 
 def acquire_recap_docket(params: RecapDocketParams) -> Iterator[AcquiredBytes]:
-    mirror = _Mirror.load(_resolve_mirror_dir(params.cache_dir)) if params.cache_dir else None
+    mirror = Mirror.load(resolve_mirror_dir(params.cache_dir)) if params.cache_dir else None
     listing = _read_listing(params.docket_id, mirror)
     for number, document in _find_requested_documents(listing, params):
         yield _acquire_document(params, number, document, mirror)
-
-
-def _resolve_mirror_dir(cache_dir: str) -> Path:
-    path = Path(cache_dir)
-    return path if path.is_absolute() else repo_root() / path
 
 
 class _RecapDocument(BaseModel):
@@ -80,63 +68,7 @@ class _SearchPage(BaseModel):
     results: list[_RecapDocument]
 
 
-class _MirrorRecord(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
-    path: str
-    origin_url: str | None = Field(validation_alias=AliasChoices("source_url", "origin_url"))
-    fetched_at: str
-    sha256: str
-
-
-@dataclass(frozen=True)
-class _Mirror:
-    root: Path
-    records_by_url: dict[str, list[_MirrorRecord]]
-
-    @classmethod
-    def load(cls, root: Path) -> _Mirror:
-        manifest = root / MIRROR_MANIFEST
-        if not manifest.is_file():
-            raise SourceUnavailable(
-                f"no {MIRROR_MANIFEST} in {root}: a mirror must record where and when it "
-                "fetched each file it holds")
-        records_by_url: dict[str, list[_MirrorRecord]] = defaultdict(list)
-        lines = manifest.read_text(encoding="utf-8").splitlines()
-        for record in _parse_mirror_records(manifest, lines):
-            if record.origin_url is not None:
-                records_by_url[record.origin_url].append(record)
-        return cls(root, dict(records_by_url))
-
-    def find(self, url: str) -> tuple[Path, _MirrorRecord]:
-        records = self.records_by_url.get(url, [])
-        if len(records) != 1:
-            raise SourceUnavailable(
-                f"the mirror at {self.root} records {url} {len(records)} times, not once")
-        path = Path(records[0].path)
-        stored = path if path.is_absolute() else self.root / path
-        if not stored.is_file():
-            raise SourceUnavailable(f"the mirror records {url} at {stored}, which is not a file")
-        return stored, records[0]
-
-    def read(self, url: str) -> bytes:
-        path, record = self.find(url)
-        digest = compute_sha256(path)
-        if digest != record.sha256:
-            raise MirrorDisagrees(
-                name=str(path), digest=digest, recorded=record.sha256, origin_url=url)
-        return path.read_bytes()
-
-
-def _parse_mirror_records(manifest: Path, lines: list[str]) -> list[_MirrorRecord]:
-    try:
-        return [_MirrorRecord.model_validate_json(line) for line in lines if line.strip()]
-    except ValidationError as invalid:
-        raise SourceUnavailable(
-            f"{manifest} holds a line that is not a fetch record: {invalid}") from invalid
-
-
-def _read_listing(docket_id: int, mirror: _Mirror | None) -> list[_RecapDocument]:
+def _read_listing(docket_id: int, mirror: Mirror | None) -> list[_RecapDocument]:
     url: str | None = (f"{COURTLISTENER_API}search/?type=rd&q=docket_id%3A{docket_id}"
                        "&order_by=entry_date_filed%20asc")
     documents: list[_RecapDocument] = []
@@ -160,7 +92,7 @@ def _find_requested_documents(
     problems: list[str] = []
     for number in params.entries:
         matches = [document for document in listing
-                   if (document.entry_number, document.attachment_number) == _parse(number)]
+                   if (document.entry_number, document.attachment_number) == parse_ecf_number(number)]
         if len(matches) != 1:
             problems.append(f"ECF {number} matches {len(matches)} documents on docket "
                             f"{params.docket_id}'s RECAP listing, not one")
@@ -175,10 +107,10 @@ def _find_requested_documents(
 
 
 def _acquire_document(
-    params: RecapDocketParams, number: str, document: _RecapDocument, mirror: _Mirror | None,
+    params: RecapDocketParams, number: str, document: _RecapDocument, mirror: Mirror | None,
 ) -> AcquiredBytes:
     origin_url = f"{RECAP_STORAGE}{document.filepath_local}"
-    filename = _name_file(params, number)
+    filename = name_recap_file(params.court, params.case_number, number)
     metadata = _read_metadata(number, document)
     if mirror is None:
         return AcquiredBytes(
@@ -189,22 +121,22 @@ def _acquire_document(
                          fetched_at=record.fetched_at, sha256=record.sha256)
 
 
-def _name_file(params: RecapDocketParams, number: str) -> str:
+def name_recap_file(court: str, case_number: str, number: str) -> str:
     """ECF 221-1 of txnd case 4:21-cr-00005 is txnd-4-21-cr-00005_ecf0221-att1.pdf."""
-    entry, attachment = _parse(number)
+    entry, attachment = parse_ecf_number(number)
     suffix = f"-att{attachment}" if attachment is not None else ""
-    return f"{params.court}-{params.case_number.replace(':', '-')}_ecf{entry:04d}{suffix}.pdf"
+    return f"{court}-{case_number.replace(':', '-')}_ecf{entry:04d}{suffix}.pdf"
 
 
 def _read_metadata(number: str, document: _RecapDocument) -> dict[str, MetadataValue]:
-    entry, attachment = _parse(number)
+    entry, attachment = parse_ecf_number(number)
     return {"ecf_entry": entry, "attachment": attachment,
             "date_filed": document.entry_date_filed, "description": document.description,
             "page_count": document.page_count, "pacer_doc_id": document.pacer_doc_id,
             "courtlistener_id": document.id}
 
 
-def _parse(number: str) -> tuple[int, int | None]:
+def parse_ecf_number(number: str) -> tuple[int, int | None]:
     entry, _, attachment = number.partition("-")
     return int(entry), int(attachment) if attachment else None
 

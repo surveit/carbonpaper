@@ -176,7 +176,8 @@ A `protected` contract lets only `app.main`, `app.cli` and `app.seeds.__main__` 
 loaded. A pack imports only `app.models`, `app.core` and itself
 (`app/packs/_arch_tests/`), so it never drives a run, a service or a page. What a pack
 declares, and how a run binds its connector: [packs.md](packs.md). `app/packs/docket/`
-registers `recap_docket`: a CourtListener docket's filings, one row each.
+registers `recap_docket`: a CourtListener docket's filings, one row each; and `recap_files`:
+RECAP files named by storage path, one row each.
 `app/packs/opinions/` registers `courtlistener_opinions`: the opinions a CourtListener search
 finds, one row per stored PDF.
 
