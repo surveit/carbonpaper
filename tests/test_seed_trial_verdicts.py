@@ -25,16 +25,18 @@ def test_the_bundle_imports_with_no_issues() -> None:
     assert workflow_summary.read_workflow_summary(project_id).issues == []
 
 
-def test_every_transcript_file_the_input_names_is_in_the_mirror_as_recorded() -> None:
-    params = RecapFilesParams.model_validate(_read_stage("input_transcripts")["connector"]["params"])
+def test_every_file_the_inputs_name_is_in_the_mirror_as_recorded() -> None:
+    named = [file for stage_id in ("input_transcripts", "input_records")
+             for file in RecapFilesParams.model_validate(
+                 _read_stage(stage_id)["connector"]["params"]).files]
     records = [json.loads(line) for line in
                (_MIRROR / MIRROR_MANIFEST).read_text(encoding="utf-8").splitlines() if line]
     by_url = {record["source_url"]: record for record in records}
-    for file in params.files:
+    for file in named:
         record = by_url[f"https://storage.courtlistener.com/{file.path}"]
         stored = (_MIRROR / record["path"]).read_bytes()
         assert hashlib.sha256(stored).hexdigest() == record["sha256"]
-    assert len(params.files) == len(records)
+    assert len(named) == len(records)
 
 
 def test_each_trial_lists_its_files_in_part_order_from_one() -> None:
@@ -130,3 +132,31 @@ def test_the_comparison_matches_counts_by_number(
     row = _compile("compare_verdicts")(
         {"jury_verdicts": _verdicts(*jury), "verdicts": _verdicts(*model)})
     assert (row["agreement"], row["disagreements"]) == (agreement, lines)
+
+
+def test_the_comparison_names_a_trial_whose_judge_reply_failed() -> None:
+    row = _compile("compare_verdicts")({"jury_verdicts": _verdicts((1, "guilty")), "verdicts": None})
+    assert (row["agreement"], row["counts_compared"]) == ("no_model_verdict", 0)
+
+
+def _record(*verdicts: tuple[int, str]) -> list[dict]:
+    return [{"count": count, "verdict": verdict} for count, verdict in verdicts]
+
+
+@pytest.mark.parametrize("read, record, agreement, lines", [
+    ([(1, "guilty"), (2, "guilty")], _record((1, "guilty"), (2, "guilty")), "agree", []),
+    ([(1, "guilty"), (2, "guilty")], _record((1, "guilty"), (2, "not_guilty")), "disagree",
+     ["Count 2: the transcript reading says guilty; the judgment says not_guilty"]),
+    ([(1, "no_verdict")], _record(), "disagree",
+     ["Count 1: the transcript reading says no_verdict; the judgment names no such count"]),
+    ([(1, "guilty")], _record((1, "guilty"), (3, "guilty")), "disagree",
+     ["Count 3: the judgment says guilty; the transcript reading names no such count"]),
+    ([(1, "guilty")], None, "no_record",
+     ["No judgment for this trial is in the mirror, so the transcript reading goes unchecked"]),
+])
+def test_the_ground_truth_check_matches_the_judgment_by_count(
+    read: list[tuple[int, str]], record: list[dict] | None, agreement: str, lines: list[str],
+) -> None:
+    row = _compile("check_ground_truth")(
+        {"jury_verdicts": _verdicts(*read), "record_verdicts": record})
+    assert (row["record_agreement"], row["record_notes"]) == (agreement, lines)

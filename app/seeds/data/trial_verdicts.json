@@ -1,6 +1,6 @@
 {
  "name": "trial_verdicts",
- "document": "# Would a model reach the jury's verdict? Five federal criminal trials\n\n## The question\n\nGiven everything a jury heard up to the moment it left to deliberate, does a model reach the same verdict, count by count? Where it does not, the disagreement is the finding: each model verdict comes with reasoning that cites the transcript page by page, so a reader can see what the model weighed differently.\n\n## The trials\n\nFive federal criminal jury trials of one defendant each, whose complete trial transcripts (every day or volume, through the verdict) are in CourtListener's RECAP archive:\n\n| Trial | Court and case | Transcript files |\n|---|---|---|\n| United States v. Joos | W.D. Mo. 3:09-cr-05022 | ECF 80, 81 (2 days, 2010) |\n| United States v. Poke | N.D. Ill. 3:11-cr-50062 | ECF 141, 142 (2 volumes, 2013) |\n| United States v. Atta | S.D. Cal. 3:21-cr-01289 | ECF 114, 115 (2 days, 2022) |\n| United States v. Craft | W.D. Ky. 3:22-cr-00094 | ECF 97 to 101 (5 volumes, 2023, redacted) |\n| United States v. Tulali | D. Alaska 4:23-cr-00003 | ECF 152 to 156 (5 days, 2024) |\n\nThey are not a sample of trials. A transcript reaches RECAP only when someone pays for it, which mostly happens for an appeal, and only a conviction is appealed by the defendant; all five juries convicted. A model that always says guilty agrees with every one of them, so agreement here says little; the reasoning and any disagreement say more. `app/seeds/data/trial_verdicts/SOURCES.md` lists how they were found and which candidates were left out.\n\n## The steps\n\n1. **Read.** Each transcript file is read a page at a time; every page is a span, a quote with its address in the stored PDF.\n2. **Mark the verdict.** A model reads each whole transcript, verdict included, and quotes three things: the words recording the jury leaving to deliberate, the words reading the verdict, and any earlier passage that gives the outcome away, such as an index listing the verdict's page. It also lists the jury's verdict on each count. Every quote links to its page.\n3. **Strip the verdict.** Code keeps every page before the one where deliberations began, keeps that page only up to the quoted words, and drops each earlier page holding a quoted leak. Jury notes, the verdict, polling and sentencing talk are all after the cut.\n4. **Judge.** A model reads only the stripped transcript, with no caption or verdict, and decides each count as the judge instructed the jury: the law as the instructions state it, the presumption of innocence, proof beyond a reasonable doubt. Its reasoning cites the transcript by quote; each citation links to the page it came from.\n5. **Recall check.** A model is shown only the case caption and asked whether it remembers how the jury decided. A trial it remembers is flagged: agreement there may come from memory, not the transcript.\n6. **Compare.** Code matches the two verdicts by count number and lists every count where they differ.\n\n## What the model does not have\n\nThe jury saw witnesses and exhibits; the model reads a transcript. An exhibit that was shown but never read aloud is missing, and so is demeanor. The judging prompt tells the model to say where that gap matters.\n\n## Running it\n\nThe model steps read up to about 860 pages in one call, so each can run for many minutes; set `CARBON_PAPER_LLM_TIMEOUT_S` above its 180-second default before running.\n",
+ "document": "# Would a model reach the jury's verdict? Five federal criminal trials\n\n## The question\n\nGiven everything a jury heard up to the moment it left to deliberate, does a model reach the same verdict, count by count? Where it does not, the disagreement is the finding: each model verdict comes with reasoning that cites the transcript page by page, so a reader can see what the model weighed differently.\n\n## The trials\n\nFive federal criminal jury trials of one defendant each, whose complete trial transcripts (every day or volume, through the verdict) are in CourtListener's RECAP archive:\n\n| Trial | Court and case | Transcript files |\n|---|---|---|\n| United States v. Joos | W.D. Mo. 3:09-cr-05022 | ECF 80, 81 (2 days, 2010) |\n| United States v. Poke | N.D. Ill. 3:11-cr-50062 | ECF 141, 142 (2 volumes, 2013) |\n| United States v. Atta | S.D. Cal. 3:21-cr-01289 | ECF 114, 115 (2 days, 2022) |\n| United States v. Craft | W.D. Ky. 3:22-cr-00094 | ECF 97 to 101 (5 volumes, 2023, redacted) |\n| United States v. Tulali | D. Alaska 4:23-cr-00003 | ECF 152 to 156 (5 days, 2024) |\n\nThey are not a sample of trials. A transcript reaches RECAP only when someone pays for it, which mostly happens for an appeal, and only a conviction is appealed by the defendant; all five juries convicted. A model that always says guilty agrees with every one of them, so agreement here says little; the reasoning and any disagreement say more. `app/seeds/data/trial_verdicts/SOURCES.md` lists how they were found and which candidates were left out.\n\n## The steps\n\n1. **Read.** Each transcript file is read a page at a time; every page is a span, a quote with its address in the stored PDF.\n2. **Mark the verdict.** A model reads each whole transcript, verdict included, and quotes three things: the words recording the jury leaving to deliberate, the words reading the verdict, and any earlier passage that gives the outcome away, such as an index listing the verdict's page. It also lists the jury's verdict on each count. Every quote links to its page.\n3. **Strip the verdict.** Code keeps every page before the one where deliberations began, keeps that page only up to the quoted words, and drops each earlier page holding a quoted leak. Jury notes, the verdict, polling and sentencing talk are all after the cut.\n4. **Judge.** A model reads only the stripped transcript, with no caption or verdict, and decides each count as the judge instructed the jury: the law as the instructions state it, the presumption of innocence, proof beyond a reasonable doubt. Its reasoning cites the transcript by quote; each citation links to the page it came from.\n5. **Recall check.** A model is shown only the case caption and asked whether it remembers how the jury decided. A trial it remembers is flagged: agreement there may come from memory, not the transcript.\n6. **Compare.** Code matches the two verdicts by count number and lists every count where they differ.\n7. **Check the ground truth.** Step 2 takes the jury's verdict from the transcript, so a second source checks it: a different model (claude-sonnet-5) reads each trial's Judgment in a Criminal Case, a separate filing on the docket, and lists the counts the defendant was found guilty or not guilty on; code compares that with step 2's reading, count by count. Poke's judgment is not in RECAP, so its reading goes unchecked and says so.\n\n## What the model does not have\n\nThe jury saw witnesses and exhibits; the model reads a transcript. An exhibit that was shown but never read aloud is missing, and so is demeanor. The judging prompt tells the model to say where that gap matters.\n\n## Running it\n\nThe model steps read up to about 860 pages in one call, so each can run for many minutes; set `CARBON_PAPER_LLM_TIMEOUT_S` above its 180-second default before running.\n",
  "model": "opus",
  "source": "hand-written",
  "data_model": {
@@ -20,7 +20,7 @@
   {
    "id": "trial",
    "title": "Trial",
-   "definition": "One federal criminal jury trial of one defendant: every page of its transcript, and what each step decided about it."
+   "definition": "One federal criminal jury trial of one defendant, and what each step read or decided about it."
   }
  ],
  "verbs": [],
@@ -1075,12 +1075,677 @@
      }
     ],
     "rewrites": []
+   }
+  },
+  {
+   "id": "input_records",
+   "type": "input_data",
+   "row_type_id": "transcript_file",
+   "description": "Reads each trial's judgment from the same mirror, one row per file; Poke's judgment is not in RECAP.",
+   "inputs": [],
+   "cache": false,
+   "compiler_notes": [
+    "Each trial's Judgment in a Criminal Case, as its docket lists it; app/seeds/data/trial_verdicts/SOURCES.md says which entry and why."
+   ],
+   "connector": {
+    "kind": "recap_files",
+    "params": {
+     "files": [
+      {
+       "path": "recap/gov.uscourts.mowd.91111/gov.uscourts.mowd.91111.90.0.pdf",
+       "court": "mowd",
+       "case_number": "3:09-cr-05022",
+       "case_name": "United States v. Joos",
+       "docket_id": 30527442,
+       "ecf": "90",
+       "part": 1,
+       "description": "Judgment and Commitment, May 20, 2010"
+      },
+      {
+       "path": "recap/gov.uscourts.casd.706125/gov.uscourts.casd.706125.256.0.pdf",
+       "court": "casd",
+       "case_number": "3:21-cr-01289",
+       "case_name": "United States v. Atta",
+       "docket_id": 59891498,
+       "ecf": "256",
+       "part": 1,
+       "description": "Judgment, January 12, 2026"
+      },
+      {
+       "path": "recap/gov.uscourts.kywd.127039/gov.uscourts.kywd.127039.76.0.pdf",
+       "court": "kywd",
+       "case_number": "3:22-cr-00094",
+       "case_name": "United States v. Craft",
+       "docket_id": 64909469,
+       "ecf": "76",
+       "part": 1,
+       "description": "Judgment and Commitment Order, July 28, 2023"
+      },
+      {
+       "path": "recap/gov.uscourts.akd.70443/gov.uscourts.akd.70443.137.0.pdf",
+       "court": "akd",
+       "case_number": "4:23-cr-00003",
+       "case_name": "United States v. Tulali",
+       "docket_id": 69267159,
+       "ecf": "137",
+       "part": 1,
+       "description": "Judgment, October 16, 2024"
+      }
+     ],
+     "cache_dir": "app/seeds/data/trial_verdicts"
+    }
+   },
+   "signature": {
+    "form": "replaces",
+    "produces": [
+     {
+      "name": "source_id",
+      "type": "str",
+      "nullable": false,
+      "description": "The stored file this row is."
+     },
+     {
+      "name": "source_sha256",
+      "type": "str",
+      "nullable": false,
+      "description": "What the stored file's bytes hash to."
+     },
+     {
+      "name": "filename",
+      "type": "str",
+      "nullable": false,
+      "description": "The file's name, built from the court, the case number and the ECF entry."
+     },
+     {
+      "name": "origin_url",
+      "type": "str",
+      "nullable": true,
+      "description": "Where CourtListener's RECAP archive stores the PDF."
+     },
+     {
+      "name": "fetched_at",
+      "type": "str",
+      "nullable": true,
+      "description": "When the file was fetched from that URL."
+     },
+     {
+      "name": "case_name",
+      "type": "str",
+      "nullable": true,
+      "description": "The case's name, as its CourtListener docket gives it."
+     },
+     {
+      "name": "court",
+      "type": "str",
+      "nullable": true,
+      "description": "CourtListener's id for the federal district court, such as akd for the District of Alaska."
+     },
+     {
+      "name": "case_number",
+      "type": "str",
+      "nullable": true,
+      "description": "The district court's criminal case number."
+     },
+     {
+      "name": "docket_id",
+      "type": "int",
+      "nullable": true,
+      "description": "CourtListener's id for the case's docket."
+     },
+     {
+      "name": "ecf_entry",
+      "type": "int",
+      "nullable": true,
+      "description": "The docket entry number the transcript file was filed as."
+     },
+     {
+      "name": "attachment",
+      "type": "int",
+      "nullable": true,
+      "description": "The attachment number within that entry; null for the entry's main document."
+     },
+     {
+      "name": "part",
+      "type": "int",
+      "nullable": true,
+      "description": "Where this file sits among its trial's transcript files, counting from 1."
+     },
+     {
+      "name": "description",
+      "type": "str",
+      "nullable": true,
+      "description": "Which day or volume of the trial the file transcribes, as the docket describes it."
+     }
+    ]
+   }
+  },
+  {
+   "id": "read_record_pages",
+   "type": "read_pages",
+   "row_type_id": "transcript_page",
+   "description": "Reads every page of every judgment, one row per page.",
+   "inputs": [
+    {
+     "id": "input_records"
+    }
+   ],
+   "cache": false,
+   "compiler_notes": [],
+   "read_pages": {
+    "carry": [
+     "case_name",
+     "court",
+     "case_number"
+    ]
+   },
+   "signature": {
+    "form": "replaces",
+    "reads": [
+     {
+      "input": "input_records",
+      "columns": [
+       {
+        "name": "source_id",
+        "type": "str",
+        "nullable": false,
+        "description": "The stored file this row is."
+       },
+       {
+        "name": "source_sha256",
+        "type": "str",
+        "nullable": false,
+        "description": "What the stored file's bytes hash to."
+       },
+       {
+        "name": "case_name",
+        "type": "str",
+        "nullable": true,
+        "description": "The case's name, as its CourtListener docket gives it."
+       },
+       {
+        "name": "court",
+        "type": "str",
+        "nullable": true,
+        "description": "CourtListener's id for the federal district court, such as akd for the District of Alaska."
+       },
+       {
+        "name": "case_number",
+        "type": "str",
+        "nullable": true,
+        "description": "The district court's criminal case number."
+       }
+      ]
+     }
+    ],
+    "produces": [
+     {
+      "name": "source_id",
+      "type": "str",
+      "nullable": false,
+      "description": "The stored file this row is."
+     },
+     {
+      "name": "source_sha256",
+      "type": "str",
+      "nullable": false,
+      "description": "What the stored file's bytes hash to."
+     },
+     {
+      "name": "case_name",
+      "type": "str",
+      "nullable": true,
+      "description": "The case's name, as its CourtListener docket gives it."
+     },
+     {
+      "name": "court",
+      "type": "str",
+      "nullable": true,
+      "description": "CourtListener's id for the federal district court, such as akd for the District of Alaska."
+     },
+     {
+      "name": "case_number",
+      "type": "str",
+      "nullable": true,
+      "description": "The district court's criminal case number."
+     },
+     {
+      "name": "page",
+      "type": "int",
+      "nullable": false,
+      "description": "The page of the file's PDF, counting from 1."
+     },
+     {
+      "name": "page_text",
+      "type": "str",
+      "nullable": false,
+      "description": "The page's text layer, as pypdf reads it."
+     },
+     {
+      "name": "page_span",
+      "type": "span",
+      "nullable": false,
+      "description": "A span over the page's whole text."
+     }
+    ]
+   }
+  },
+  {
+   "id": "by_record",
+   "type": "aggregate",
+   "row_type_id": "trial",
+   "description": "Gathers each trial's judgment pages into one row.",
+   "inputs": [
+    {
+     "id": "read_record_pages"
+    }
+   ],
+   "cache": false,
+   "compiler_notes": [],
+   "aggregate": {
+    "group_by": [
+     "case_name",
+     "court",
+     "case_number"
+    ],
+    "aggregations": [
+     {
+      "output_column": "record_pages",
+      "formula": "list",
+      "value_column": "page_span"
+     }
+    ]
+   },
+   "signature": {
+    "form": "replaces",
+    "reads": [
+     {
+      "input": "read_record_pages",
+      "columns": [
+       {
+        "name": "case_name",
+        "type": "str",
+        "nullable": true,
+        "description": "The case's name, as its CourtListener docket gives it."
+       },
+       {
+        "name": "court",
+        "type": "str",
+        "nullable": true,
+        "description": "CourtListener's id for the federal district court, such as akd for the District of Alaska."
+       },
+       {
+        "name": "case_number",
+        "type": "str",
+        "nullable": true,
+        "description": "The district court's criminal case number."
+       },
+       {
+        "name": "page_span",
+        "type": "span",
+        "nullable": false,
+        "description": "A span over the page's whole text."
+       }
+      ]
+     }
+    ],
+    "produces": [
+     {
+      "name": "case_name",
+      "type": "str",
+      "nullable": true,
+      "description": "The case's name, as its CourtListener docket gives it."
+     },
+     {
+      "name": "court",
+      "type": "str",
+      "nullable": true,
+      "description": "CourtListener's id for the federal district court, such as akd for the District of Alaska."
+     },
+     {
+      "name": "case_number",
+      "type": "str",
+      "nullable": true,
+      "description": "The district court's criminal case number."
+     },
+     {
+      "name": "record_pages",
+      "type": "list[span]",
+      "nullable": false,
+      "description": "Every page of the trial's judgment, in order."
+     }
+    ]
+   }
+  },
+  {
+   "id": "read_record_verdict",
+   "type": "llm_transform",
+   "description": "Reads what each trial's judgment says the jury found, count by count, and quotes the words.",
+   "inputs": [
+    {
+     "id": "by_record"
+    }
+   ],
+   "cache": true,
+   "compiler_notes": [
+    "A different model from the steps that read the transcript, so an error in one is less likely to repeat in the other."
+   ],
+   "llm": {
+    "prompt_instructions": "You are reading a federal court's own record of how a criminal case ended, its Judgment in a Criminal Case (form AO 245B), for a study that compares a model's verdict in a jury trial with the jury's. An earlier step took the jury's verdict from the trial transcript; this judgment is a second, independent source, and a reader uses your answer to check that the transcript reading got the jury's verdict right. You see only this record.\n\nReturn:\n- \"record_verdicts\": one entry per count of the operative indictment that the judgment says the defendant was found guilty or not guilty on after a trial: {\"count\": the count's number, \"verdict\": \"guilty\" or \"not_guilty\"}. Leave out counts dismissed, counts of an earlier indictment that a superseding one replaced, and allegations that are not numbered counts, such as a sentencing enhancement. A count written \"1s\" is count 1. On a form with check boxes, read which box is marked: a scanned form may show a marked box as characters such as \"IZI\" or \"☒\" and an empty one as \"D\" or \"☐\". Return [] if the judgment states no finding after trial.\n- \"record_quote\" as {\"quote\": ...}: the words stating which counts the defendant was found guilty on, copied exactly, at least six words. Null when \"record_verdicts\" is [].\n\nExample of a reply:\n{\"record_verdicts\": [{\"count\": 1, \"verdict\": \"guilty\"}, {\"count\": 2, \"verdict\": \"guilty\"}], \"record_quote\": {\"quote\": \"was found guilty on count(s) 1 and 2 of the Superseding Indictment\"}}",
+    "prompt_data_template": "Case: {case_name} ({court} {case_number}).\n\nThe judgment, one JSON string per page:\n{record_pages}",
+    "model": "claude-sonnet-5",
+    "temperature": 0.0,
+    "max_retries": 2,
+    "response_format": "json",
+    "batch_size": 1,
+    "thinking": "adaptive"
+   },
+   "signature": {
+    "form": "extends",
+    "reads": [
+     {
+      "input": "by_record",
+      "columns": [
+       {
+        "name": "case_name",
+        "type": "str",
+        "nullable": true,
+        "description": "The case's name, as its CourtListener docket gives it."
+       },
+       {
+        "name": "court",
+        "type": "str",
+        "nullable": true,
+        "description": "CourtListener's id for the federal district court, such as akd for the District of Alaska."
+       },
+       {
+        "name": "case_number",
+        "type": "str",
+        "nullable": true,
+        "description": "The district court's criminal case number."
+       },
+       {
+        "name": "record_pages",
+        "type": "list[span]",
+        "nullable": false,
+        "description": "Every page of the trial's judgment, in order."
+       }
+      ]
+     }
+    ],
+    "adds": [
+     {
+      "name": "record_verdicts",
+      "type": "list[json]",
+      "nullable": false,
+      "description": "What the court's judgment says the jury found on each count it decided; dismissed counts, superseded counts and sentencing allegations are left out.",
+      "fields": [
+       {
+        "name": "count",
+        "type": "int",
+        "nullable": false,
+        "description": "The count's number in the indictment."
+       },
+       {
+        "name": "verdict",
+        "type": "str",
+        "nullable": false,
+        "description": "What the record says the jury found on the count.",
+        "enum": [
+         "guilty",
+         "not_guilty"
+        ]
+       }
+      ]
+     },
+     {
+      "name": "record_quote",
+      "type": "span",
+      "nullable": true,
+      "description": "The judgment's words stating the counts the defendant was found guilty or not guilty on; null when it states no finding after trial.",
+      "quoted_from": "record_pages"
+     }
+    ],
+    "rewrites": []
+   }
+  },
+  {
+   "id": "land_record",
+   "type": "enrich",
+   "cache": true,
+   "description": "Sets each trial's judgment reading beside its comparison row, matched by case number; a trial with no judgment gets nulls.",
+   "inputs": [
+    {
+     "id": "compare_verdicts"
+    },
+    {
+     "id": "read_record_verdict"
+    }
+   ],
+   "compiler_notes": [],
+   "join": {
+    "keys": [
+     {
+      "left": "case_number",
+      "right": "case_number"
+     }
+    ],
+    "enrich_with": {
+     "record_verdicts": "record_verdicts",
+     "record_quote": "record_quote"
+    }
+   },
+   "signature": {
+    "form": "extends",
+    "reads": [
+     {
+      "input": "compare_verdicts",
+      "columns": [
+       {
+        "name": "case_number",
+        "type": "str",
+        "nullable": true,
+        "description": "The district court's criminal case number."
+       }
+      ]
+     },
+     {
+      "input": "read_record_verdict",
+      "columns": [
+       {
+        "name": "case_number",
+        "type": "str",
+        "nullable": true,
+        "description": "The district court's criminal case number."
+       },
+       {
+        "name": "record_verdicts",
+        "type": "list[json]",
+        "nullable": false,
+        "description": "What the court's judgment says the jury found on each count it decided; dismissed counts, superseded counts and sentencing allegations are left out.",
+        "fields": [
+         {
+          "name": "count",
+          "type": "int",
+          "nullable": false,
+          "description": "The count's number in the indictment."
+         },
+         {
+          "name": "verdict",
+          "type": "str",
+          "nullable": false,
+          "description": "What the record says the jury found on the count.",
+          "enum": [
+           "guilty",
+           "not_guilty"
+          ]
+         }
+        ]
+       },
+       {
+        "name": "record_quote",
+        "type": "span",
+        "nullable": true,
+        "description": "The judgment's words stating the counts the defendant was found guilty or not guilty on; null when it states no finding after trial."
+       }
+      ]
+     }
+    ],
+    "adds": [
+     {
+      "name": "record_verdicts",
+      "type": "list[json]",
+      "nullable": true,
+      "description": "What the court's judgment says the jury found on each count; null for a trial with no judgment in the mirror.",
+      "fields": [
+       {
+        "name": "count",
+        "type": "int",
+        "nullable": false,
+        "description": "The count's number in the indictment."
+       },
+       {
+        "name": "verdict",
+        "type": "str",
+        "nullable": false,
+        "description": "What the record says the jury found on the count.",
+        "enum": [
+         "guilty",
+         "not_guilty"
+        ]
+       }
+      ]
+     },
+     {
+      "name": "record_quote",
+      "type": "span",
+      "nullable": true,
+      "description": "The judgment's words stating the finding; null for a trial with no judgment in the mirror."
+     }
+    ],
+    "rewrites": []
+   }
+  },
+  {
+   "id": "check_ground_truth",
+   "type": "starlark_row_function",
+   "description": "Checks the jury's verdict as read from the transcript against the court's judgment, count by count.",
+   "inputs": [
+    {
+     "id": "land_record"
+    }
+   ],
+   "cache": true,
+   "compiler_notes": [],
+   "starlark": {
+    "summary": "Matches the transcript reading and the judgment by count number, and writes one line per count where they differ or only one names it.",
+    "corner_cases": [
+     {
+      "case": "no judgment for the trial is in the mirror",
+      "expected": "the trial reads no_record and its line says the transcript reading goes unchecked"
+     },
+     {
+      "case": "the jury could not decide a count",
+      "expected": "the transcript reading says no_verdict, the judgment names no such count, and the trial reads disagree"
+     }
+    ],
+    "code": "def transform(row):\n    if row[\"record_verdicts\"] == None:\n        return dict(row, record_agreement=\"no_record\",\n                    record_notes=[\"No judgment for this trial is in the mirror, so the transcript reading goes unchecked\"])\n    read = by_count(row[\"jury_verdicts\"])\n    record = by_count(row[\"record_verdicts\"])\n    notes = []\n    for count in sorted(read):\n        if count not in record:\n            notes.append(\"Count %d: the transcript reading says %s; the judgment names no such count\" % (count, read[count]))\n        elif read[count] != record[count]:\n            notes.append(\"Count %d: the transcript reading says %s; the judgment says %s\" % (count, read[count], record[count]))\n    for count in sorted(record):\n        if count not in read:\n            notes.append(\"Count %d: the judgment says %s; the transcript reading names no such count\" % (count, record[count]))\n    return dict(row, record_agreement=\"agree\" if not notes else \"disagree\", record_notes=notes)\n\n\ndef by_count(verdicts):\n    found = {}\n    for verdict in verdicts:\n        found[verdict[\"count\"]] = verdict[\"verdict\"]\n    return found\n"
+   },
+   "signature": {
+    "form": "extends",
+    "reads": [
+     {
+      "input": "land_record",
+      "columns": [
+       {
+        "name": "jury_verdicts",
+        "type": "list[json]",
+        "nullable": false,
+        "description": "The jury's verdict on each count, in the order read in court.",
+        "fields": [
+         {
+          "name": "count",
+          "type": "int",
+          "nullable": false,
+          "description": "The count's number in the indictment."
+         },
+         {
+          "name": "charge",
+          "type": "str",
+          "nullable": false,
+          "description": "What the count charges, in under 12 words."
+         },
+         {
+          "name": "verdict",
+          "type": "str",
+          "nullable": false,
+          "description": "The jury's verdict on the count as read in court.",
+          "enum": [
+           "guilty",
+           "not_guilty",
+           "no_verdict"
+          ]
+         },
+         {
+          "name": "finding",
+          "type": "str",
+          "nullable": true,
+          "description": "The jury's answer to any special question asked on this count, such as a drug quantity; null when none was asked."
+         }
+        ]
+       },
+       {
+        "name": "record_verdicts",
+        "type": "list[json]",
+        "nullable": true,
+        "description": "What the court's judgment says the jury found on each count; null for a trial with no judgment in the mirror.",
+        "fields": [
+         {
+          "name": "count",
+          "type": "int",
+          "nullable": false,
+          "description": "The count's number in the indictment."
+         },
+         {
+          "name": "verdict",
+          "type": "str",
+          "nullable": false,
+          "description": "What the record says the jury found on the count.",
+          "enum": [
+           "guilty",
+           "not_guilty"
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ],
+    "adds": [
+     {
+      "name": "record_agreement",
+      "type": "str",
+      "nullable": false,
+      "description": "agree: the judgment names the same verdict as the transcript reading on every count, and no other count; disagree: a count differs or only one source names it; no_record: no judgment for this trial is in the mirror.",
+      "enum": [
+       "agree",
+       "disagree",
+       "no_record"
+      ]
+     },
+     {
+      "name": "record_notes",
+      "type": "list[str]",
+      "nullable": false,
+      "description": "One line per count where the transcript reading and the judgment differ, or why there is nothing to check."
+     }
+    ],
+    "rewrites": []
    },
    "workflow_outputs": [
     {
      "kind": "table",
      "slug": "verdict_comparison",
-     "label": "The model's verdict beside the jury's, trial by trial"
+     "label": "The model's verdict beside the jury's, trial by trial, with the jury's verdict checked against the judgment"
     }
    ]
   }

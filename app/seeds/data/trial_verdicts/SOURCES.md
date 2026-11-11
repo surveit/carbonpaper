@@ -1,6 +1,6 @@
 # Sources: five federal criminal jury trials, verdicts included
 
-A mirror of 16 transcript files from CourtListener's RECAP archive, read by the `recap_files` connector through the `trial_verdicts` bundle's `cache_dir`, so a run never calls CourtListener. `manifest.jsonl` is the fetch record for every file here, with paths relative to this directory.
+A mirror of 16 transcript files and 4 judgments from CourtListener's RECAP archive, read by the `recap_files` connector through the `trial_verdicts` bundle's `cache_dir`, so a run never calls CourtListener. `manifest.jsonl` is the fetch record for every file here, with paths relative to this directory.
 
 ## Terms
 
@@ -34,6 +34,23 @@ Every trial kept ended in conviction on every count. A transcript reaches RECAP 
 | United States v. Tulali | 156 | `pdfs/akd-4-23-cr-00003_ecf0156.pdf` | 77 | Trial by Jury - Trial Day 5, April 19, 2024 | https://storage.courtlistener.com/recap/gov.uscourts.akd.70443/gov.uscourts.akd.70443.156.0.pdf | `d529de7c348980c58acf1a14faaee798b0196b9ad3e531bc069ecec36241ecf5` | 2026-11-11T17:33:51Z |
 
 16 files, 2658 pages.
+
+## Judgments
+
+The `input_records` stage reads each trial's Judgment in a Criminal Case, a separate filing, as a second source for the jury's verdict.
+
+| Trial | ECF | File | What it is | CourtListener URL |
+|---|---|---|---|---|
+| United States v. Joos | 90 | `pdfs/mowd-3-09-cr-05022_ecf0090.pdf` | Judgment and Commitment, May 20, 2010 | https://storage.courtlistener.com/recap/gov.uscourts.mowd.91111/gov.uscourts.mowd.91111.90.0.pdf |
+| United States v. Atta | 256 | `pdfs/casd-3-21-cr-01289_ecf0256.pdf` | Judgment, January 12, 2026 | https://storage.courtlistener.com/recap/gov.uscourts.casd.706125/gov.uscourts.casd.706125.256.0.pdf |
+| United States v. Craft | 76 | `pdfs/kywd-3-22-cr-00094_ecf0076.pdf` | Judgment and Commitment Order, July 28, 2023 | https://storage.courtlistener.com/recap/gov.uscourts.kywd.127039/gov.uscourts.kywd.127039.76.0.pdf |
+| United States v. Tulali | 137 | `pdfs/akd-4-23-cr-00003_ecf0137.pdf` | Judgment, October 16, 2024 | https://storage.courtlistener.com/recap/gov.uscourts.akd.70443/gov.uscourts.akd.70443.137.0.pdf |
+
+Their sha256s and fetch times are in `manifest.jsonl`.
+
+- Joos: the Amended Judgment (ECF 100, correcting the title and section of Count 2) is not in RECAP; ECF 90 names the same counts of conviction.
+- Atta: the judgment came more than three years after the 2022 trial. The docket shows the defendant's motions for a new trial (ECF 163, 170) denied on April 30, 2024 (ECF 209), so the judgment records this jury's verdict.
+- Poke: neither the Judgment (ECF 179) nor the Amended Judgment (ECF 219) is in RECAP, so Poke has no second source.
 
 ## Left out
 
