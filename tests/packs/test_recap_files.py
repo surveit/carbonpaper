@@ -29,6 +29,7 @@ from stage_seed import save_version, set_stages
 
 DAY_1_PATH = "recap/gov.uscourts.mowd.91111/gov.uscourts.mowd.91111.80.0.pdf"
 DAY_2_PATH = "recap/gov.uscourts.mowd.91111/gov.uscourts.mowd.91111.81.0.pdf"
+FLAT_PATH = "recap/gov.uscourts.ilnd.303368.123.0.pdf"
 DAY_1_TEXT = "THE COURT: Good morning, members of the jury."
 DAY_2_TEXT = "THE COURT: The jury may retire to deliberate."
 MIRROR_FETCHED_AT = "2026-11-11T18:00:00Z"
@@ -171,9 +172,19 @@ def test_a_mirrored_file_off_its_recorded_sha256_is_refused(offline, tmp_path) -
     ([_file(DAY_1_PATH, "80", 1), _file(DAY_2_PATH, "81", 1)], "same part"),
     ([], "at least 1"),
     ([{**_file(DAY_1_PATH, "80", 1), "path": "https://example.com/a.pdf"}], "pattern"),
+    ([{**_file(DAY_1_PATH, "80", 1), "path": "recap/../gov.uscourts.ilnd.303368.123.0.pdf"}],
+     "pattern"),
+    ([{**_file(DAY_1_PATH, "80", 1), "path": "gov.uscourts.ilnd.303368.123.0.pdf"}], "pattern"),
+    ([{**_file(DAY_1_PATH, "80", 1), "path": "recap/gov.uscourts.ilnd.303368.abc.0.pdf"}],
+     "pattern"),
 ])
 def test_params_refuse_a_file_named_twice_or_off_the_archive(
     named: list[dict[str, object]], refusal: str,
 ) -> None:
     with pytest.raises(ValidationError, match=refusal):
         RecapFilesParams.model_validate({"files": named})
+
+
+def test_params_accept_a_file_at_the_archive_flat_path() -> None:
+    params = RecapFilesParams.model_validate({"files": [_file(FLAT_PATH, "123", 1)]})
+    assert [file.path for file in params.files] == [FLAT_PATH]
