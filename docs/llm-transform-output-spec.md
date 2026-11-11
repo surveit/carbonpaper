@@ -34,12 +34,16 @@ prompt never hand-writes — and never drifts from — an output shape.
    rewrite; there the rule is a modeling convention only.
 5. **A span column is answered with a verbatim quote and minted by the
    runtime.** The model supplies only `quote`, and `prefix`/`suffix` where the
-   quote repeats. It never supplies an address. The added column names in
-   `quoted_from` the `span` or `list[span]` column it reads, and the prompt shows
-   that column as its text. The runtime finds the quote there and copies
-   `source_id`, `source_sha256` and the page from that span. For a `list[span]`
-   column, the quote must be one of the listed quotes whole. A span nested in a
-   list or a `json` column is refused, because nothing mints it. Normalizing
+   quote repeats. It never supplies an address. The added column, of type `span`
+   or `list[span]`, names in `quoted_from` the `span` or `list[span]` column it
+   reads, and the prompt shows that column as its text. The runtime finds the
+   quote there and copies `source_id`, `source_sha256` and the page from that
+   span. A `list[span]` added column is answered with an array of quotes, and
+   each is minted the same way; an empty array is an answer. For a `list[span]`
+   quoted-from column, a quote that reads as one listed quote whole is that
+   listed span, unchanged; otherwise the quote must sit at one place inside the
+   listed spans, and is narrowed there. A span nested in a `json` column or a
+   list of lists is refused, because nothing mints it. Normalizing
    whitespace does not join a word broken across lines with a hard hyphen, so
    such a word is quoted as printed, hyphen and break included: "pro- ceeds",
    not "proceeds".
@@ -73,14 +77,15 @@ prompt never hand-writes — and never drifts from — an output shape.
   own characters. It then mints the span with `narrow_span`. On the per-row path
   a quote found nowhere, or at more than one place, is sent back up to
   `max_retries` times with what to fix: copy the words exactly as shown, or give
-  a prefix or suffix. The model's correction names no file or page, because the
-  model was shown neither. After the last attempt the row carries `_error`
-  naming the file, the page and the quote. Two listed spans at different places
-  that read the same fail the row at once, because a quote alone cannot pick
-  one. A batched call is not re-asked for one item: that item's row carries the
-  refusal.
+  a prefix or suffix or quote more words. Across listed spans, a quote found in
+  two of them is two places. The model's correction names no file or page,
+  because the model was shown neither. After the last attempt the row carries
+  `_error` naming the file and the page, or for listed spans the column, and the
+  quote. Two listed spans at different places whose whole quotes read the same
+  fail the row at once, because a quote alone cannot pick one. A batched call is
+  not re-asked for one item: that item's row carries the refusal.
   `find_llm_signature_issues` holds `quoted_from` to a read `span` or
-  `list[span]` column.
+  `list[span]` column, and refuses spans an added column holds any deeper.
 - **The reply is validated by construction.** `call_llm` renders the stage's prompt and
   runs a headless `app.core.agent.agent.Agent` whose `target_schema` is that compiled model, so
   a schema-invalid reply is re-asked inside the agent's own loop rather than

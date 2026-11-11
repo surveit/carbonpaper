@@ -13,6 +13,7 @@ from app.core.prompt_template import find_template_fields
 from app.models.schema import (
     LIST_SPAN_COLUMN_TYPE,
     SPAN_COLUMN_TYPE,
+    SPAN_COLUMN_TYPES,
     Column,
     StageConfig,
     TableSchema,
@@ -215,7 +216,7 @@ def _find_quoted_from_issues(stage: "LLMTransformStage") -> list[str]:
         for entry in stage.signature.reads
         if entry.input == anchor_id
         for column in entry.columns
-        if column.type in (SPAN_COLUMN_TYPE, LIST_SPAN_COLUMN_TYPE)
+        if column.type in SPAN_COLUMN_TYPES
     }
     return [
         f"stage '{stage.id}': {issue}"
@@ -225,11 +226,11 @@ def _find_quoted_from_issues(stage: "LLMTransformStage") -> list[str]:
 
 
 def _find_quoted_from_issue(column: Column, span_columns_read: set[str]) -> str | None:
-    if column.type != SPAN_COLUMN_TYPE:
+    if column.type not in SPAN_COLUMN_TYPES:
         if not holds_spans(column):
             return None
         return (f"`{column.name}` holds spans inside a `{column.type}` column, but the runtime "
-                f"mints only a column of type `span`")
+                f"mints only a column of type `{SPAN_COLUMN_TYPE}` or `{LIST_SPAN_COLUMN_TYPE}`")
     if column.quoted_from is None:
         return (f"span column `{column.name}` names no quoted_from, the input span column "
                 f"whose text it quotes")

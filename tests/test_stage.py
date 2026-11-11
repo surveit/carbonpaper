@@ -131,7 +131,9 @@ def test_llm_transform_rejects_output_that_adds_no_columns():
             llm={"prompt_template": "do {id}"}))
 
 
-def _build_quoting_stage(page_type: str = "span", **basis: object) -> dict[str, object]:
+def _build_quoting_stage(
+    page_type: str = "span", added_type: str = "span", **basis: object
+) -> dict[str, object]:
     return S(id="extract", type="llm_transform", inputs=[{"id": "pages"}],
              signature={"form": "extends",
                         "reads": [{"input": "pages",
@@ -139,32 +141,37 @@ def _build_quoting_stage(page_type: str = "span", **basis: object) -> dict[str, 
                                                 "nullable": False},
                                                {"name": "text", "type": "str",
                                                 "nullable": False}]}],
-                        "adds": [{"name": "basis", "type": "span", "nullable": True,
+                        "adds": [{"name": "basis", "type": added_type, "nullable": True,
                                   **basis}]},
              llm={"prompt_template": "Quote the ruling from {page} ({text})"})
 
 
+@pytest.mark.parametrize("added_type", ["span", "list[span]"])
 @pytest.mark.parametrize("page_type", ["span", "list[span]"])
-def test_llm_transform_accepts_a_span_quoted_from_a_span_or_spans_it_reads(page_type):
-    stage = m.parse_stage(_build_quoting_stage(page_type, quoted_from="page"))
+def test_llm_transform_accepts_spans_quoted_from_a_span_or_spans_it_reads(page_type, added_type):
+    stage = m.parse_stage(_build_quoting_stage(page_type, added_type, quoted_from="page"))
     assert stage.signature.adds[0].quoted_from == "page"
 
 
 @pytest.mark.parametrize("added", [
-    {"name": "basis", "type": "list[span]", "nullable": True},
+    {"name": "basis", "type": "list[list[span]]", "nullable": True},
     {"name": "event", "type": "json", "nullable": True, "fields": [
         {"name": "basis", "type": "span", "nullable": True, "quoted_from": "page"}]},
+    {"name": "events", "type": "list[json]", "nullable": True, "fields": [
+        {"name": "basis", "type": "span", "nullable": True, "quoted_from": "page"}]},
 ])
-def test_llm_transform_refuses_spans_it_would_add_inside_a_list_or_json(added):
+def test_llm_transform_refuses_spans_it_would_add_inside_a_nested_list_or_json(added):
     spec = _build_quoting_stage()
     spec["signature"]["adds"] = [added]
-    with pytest.raises(ValidationError, match="the runtime mints only a column of type `span`"):
+    with pytest.raises(ValidationError,
+                       match="the runtime mints only a column of type `span` or `list\\[span\\]`"):
         m.parse_stage(spec)
 
 
-def test_llm_transform_refuses_a_span_that_names_no_quoted_from():
+@pytest.mark.parametrize("added_type", ["span", "list[span]"])
+def test_llm_transform_refuses_a_span_that_names_no_quoted_from(added_type):
     with pytest.raises(ValidationError, match="span column `basis` names no quoted_from"):
-        m.parse_stage(_build_quoting_stage())
+        m.parse_stage(_build_quoting_stage(added_type=added_type))
 
 
 @pytest.mark.parametrize("quoted_from", ["text", "headline"])

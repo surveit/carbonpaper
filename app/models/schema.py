@@ -65,6 +65,7 @@ JSON_COLUMN_TYPE = "json"
 LIST_JSON_COLUMN_TYPE = "list[json]"
 SPAN_COLUMN_TYPE = "span"
 LIST_SPAN_COLUMN_TYPE = "list[span]"
+SPAN_COLUMN_TYPES = (SPAN_COLUMN_TYPE, LIST_SPAN_COLUMN_TYPE)
 
 # The column types holding a python date/datetime, never the ISO string that spells one.
 DATE_COLUMN_TYPES: frozenset[str] = frozenset({"date", "datetime"})
@@ -156,8 +157,9 @@ class Column(_Base):
     quoted_from: Optional[str] = Field(
         default=None,
         description=(
-            "Only on a `span` column an llm_transform adds: the name of the input `span` "
-            "column holding the text this column quotes from. Required there."
+            "Only on a `span` or `list[span]` column an llm_transform adds: the name of the "
+            "input `span` or `list[span]` column holding the text this column quotes from. "
+            "Required there."
         ),
     )
 
@@ -214,10 +216,10 @@ class Column(_Base):
 
     @model_validator(mode="after")
     def _quoted_from_only_on_span(self) -> "Column":
-        if self.quoted_from is not None and self.type != SPAN_COLUMN_TYPE:
+        if self.quoted_from is not None and self.type not in SPAN_COLUMN_TYPES:
             raise ValueError(
-                f"column {self.name!r}: quoted_from is only valid on type 'span' "
-                f"(got {self.type!r})"
+                f"column {self.name!r}: quoted_from is only valid on type 'span' or "
+                f"'list[span]' (got {self.type!r})"
             )
         return self
 
@@ -546,5 +548,6 @@ def _field_for(column: Column) -> Any:
 def _describe_field(column: Column) -> str | None:
     if column.quoted_from is None:
         return column.description
-    quoted = f"A verbatim quote from `{column.quoted_from}`, never a paraphrase."
+    each = "Each item a" if column.type == LIST_SPAN_COLUMN_TYPE else "A"
+    quoted = f"{each} verbatim quote from `{column.quoted_from}`, never a paraphrase."
     return f"{column.description} {quoted}" if column.description else quoted
