@@ -45,7 +45,7 @@ def test_each_trial_lists_its_files_in_part_order_from_one() -> None:
     for file in params.files:
         parts.setdefault(file.case_number, []).append(file.part)
     assert all(found == list(range(1, len(found) + 1)) for found in parts.values())
-    assert len(parts) == 5
+    assert len(parts) == 9
 
 
 def _read_stage(stage_id: str) -> dict:
