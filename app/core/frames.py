@@ -71,7 +71,7 @@ def read_frame_file_for_display(path: Path) -> pd.DataFrame:
     if path.suffix != PARQUET_SUFFIX:
         return pd.read_csv(path)
     table = pq.read_table(path, use_pandas_metadata=True)
-    return table.to_pandas(types_mapper=_map_nested_type_to_arrow_dtype)
+    return _convert_table_to_pandas(table, _map_nested_type_to_arrow_dtype)
 
 
 def write_frame_file(frame: pd.DataFrame, path: Path) -> None:
@@ -210,7 +210,7 @@ def read_source_excel(
 # move. `use_pandas_metadata` matches what `pd.read_parquet` asks for.
 def _read_frame_parquet(path: Path) -> pd.DataFrame:
     table = pq.read_table(path, use_pandas_metadata=True)
-    return table.to_pandas(types_mapper=_map_list_type_to_arrow_dtype)
+    return _convert_table_to_pandas(table, _map_list_type_to_arrow_dtype)
 
 
 def _map_list_type_to_arrow_dtype(arrow_type: pa.DataType) -> pd.ArrowDtype | None:
@@ -326,12 +326,23 @@ def _as_json_scalar(column: str, arrow_type: pa.DataType, cell: Any) -> JsonScal
 
 def table_to_frame(table: pa.Table) -> pd.DataFrame:
     """An arrow table as pandas."""
-    return table.to_pandas(types_mapper=_map_list_type_to_arrow_dtype)
+    return _convert_table_to_pandas(table, _map_list_type_to_arrow_dtype)
+
+
+# pyarrow's same-type cast, which pandas does when it wraps a column as
+# ArrowDtype, truncates a null-typed array inside a list.
+def _convert_table_to_pandas(
+    table: pa.Table, map_type: Callable[[pa.DataType], pd.ArrowDtype | None],
+) -> pd.DataFrame:
+    return type_null_struct_fields(table).to_pandas(types_mapper=map_type)
 
 
 def type_null_struct_fields(table: pa.Table) -> pa.Table:
-    """Pandas cannot take rows of a struct holding an all-null field, so each becomes a string field."""
-    schema = pa.schema([field.with_type(_type_null_children(field.type)) for field in table.schema])
+    """Nested null fields become string: pyarrow's same-type cast truncates a null array in a list."""
+    schema = pa.schema(
+        [field.with_type(_type_null_children(field.type)) for field in table.schema],
+        metadata=table.schema.metadata,
+    )
     return table if schema.equals(table.schema) else table.cast(schema)
 
 

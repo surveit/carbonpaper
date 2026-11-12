@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 
-from app.core.frames import table_to_frame, type_null_struct_fields
+from app.core.frames import table_to_frame
 from app.models import WorkflowStage
 from app.models.stages.join import JoinStage
 
@@ -51,12 +51,12 @@ def _join_reference_into_subject(
 
     # A join is a pandas merge, so both sides are materialized here — the seam is
     # local to this handler, not on its signature.
-    subject_frame = table_to_frame(type_null_struct_fields(inputs[subject_id]))
+    subject_frame = table_to_frame(inputs[subject_id])
     # Carry each side's row ordinal through the merge so the pairing can be read
     # back off the result. `.assign` copies, so the caller's frames are untouched.
     subject = subject_frame.assign(
         **{JOIN_SUBJECT_ORD_KEY: np.arange(len(subject_frame))})
-    reference = table_to_frame(type_null_struct_fields(inputs[reference_id]))
+    reference = table_to_frame(inputs[reference_id])
 
     # Only the keys, each enrich_with column already under its landed name,
     # and the ordinal carrier cross the merge. Landed-name collisions are
